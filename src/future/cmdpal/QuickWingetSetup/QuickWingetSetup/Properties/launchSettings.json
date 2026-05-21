@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "QuickWingetSetup (Package)": {
+      "commandName": "MsixPackage",
+      "doNotLaunchApp": true
+    },
+    "QuickWingetSetup (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
