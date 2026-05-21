@@ -173,7 +173,7 @@ jobs:
       - name: Run harness (build + run + diff)
         shell: pwsh
         run: |
-          ./tests/_harness/run-flow.ps1 `
+          ./src/tests/_harness/run-flow.ps1 `
               -Id       $env:FLOW_ID `
               -Build    $env:FLOW_BUILD `
               -Run      $env:FLOW_RUN `
