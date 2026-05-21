@@ -1,0 +1,54 @@
+# Authenticode-signs all PowerShell scripts and publishes a release artifact
+# containing the signed scripts and winget DSC configuration files.
+
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.Official.CrossPlat.yml@templates
+  # Use the non-official template for testing changes in non-production branches
+  # template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    stages:
+      - stage: release
+        displayName: Sign and package release
+        jobs:
+          - job: sign_and_package
+            displayName: Sign PS1 scripts and collect release files
+            pool:
+              type: windows
+
+            variables:
+              # ob_outputDirectory is automatically published as the "drop"
+              # pipeline artifact by the OneBranch template.
+              ob_outputDirectory: $(Build.ArtifactStagingDirectory)/drop
+
+            steps:
+              # Sign all PowerShell scripts in-place.
+              - task: onebranch.pipeline.signing@1
+                displayName: Sign PowerShell scripts
+                inputs:
+                  command: sign
+                  signing_environment: azure_devops
+                  signing_profile: external_distribution
+                  files_to_sign: scripts/windows/**/*.ps1
+
+              # Collect signed PS1 scripts, winget DSC configuration files,
+              # and top-level release files into the output directory.
+              - task: CopyFiles@2
+                displayName: Collect release files
+                inputs:
+                  SourceFolder: $(Build.SourcesDirectory)
+                  Contents: |
+                    scripts/windows/**/*.ps1
+                    scripts/windows/**/*.winget
+                    README.md
+                    LICENSE
+                  TargetFolder: $(ob_outputDirectory)
