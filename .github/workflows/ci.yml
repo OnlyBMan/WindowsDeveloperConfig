@@ -52,7 +52,7 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, sys, yaml
 
-          with open("manifest.yml", "r", encoding="utf-8") as f:
+          with open("src/manifest.yml", "r", encoding="utf-8") as f:
               doc = yaml.safe_load(f) or {}
 
           flows = doc.get("flows", []) or []

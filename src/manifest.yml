@@ -1,0 +1,271 @@
+# Single source of truth for developer-flow CI **and** for the Command Palette
+# extension under cmdpal/.
+#
+# Each flow describes:
+#   * UX metadata (name/description/category/tags/icon/onboardingUrl) consumed
+#     by the Command Palette extension to render entries.
+#   * How to install a language toolchain on each supported OS, and how to
+#     build + run a canonical "hello world" to prove the install worked
+#     (consumed by CI and the build-run-diff harness).
+#
+# Adding a new flow = one entry here + one configuration.winget per OS
+# + one install.ps1 shim per OS + one hello-world file under tests/<id>/.
+# No workflow edits required.
+#
+# Schema (per flow):
+#   id:             stable identifier, used for matrix names and log paths
+#
+#   # UX (consumed by the Command Palette extension; all optional)
+#   name:           display name (defaults to id)
+#   description:    one-line summary
+#   category:       grouping tag. Recommended values:
+#                     - "languages"        : a language toolchain
+#                                            (typescript, python, go, rust, ...)
+#                     - "desktop"          : a desktop framework on top of a
+#                                            language (winforms, winui, ...)
+#                     - "user-experience"  : OS-feel / shell flows that
+#                                            shape the desktop rather than
+#                                            install dev toolchains
+#                                            (wsl-comfort, calm-os,
+#                                            common-adjustments).
+#                     - "shell"            : legacy alias for
+#                                            "user-experience"; new flows
+#                                            should pick one of the values
+#                                            above.
+#                   The field is a free-form string; CmdPal groups by it
+#                   and CI ignores it. Sticking to the recommended set
+#                   keeps the extension's grouping coherent.
+#   tags:           list of search tags
+#   icon:           emoji/glyph rendered in CmdPal
+#   onboardingUrl:  link to the canonical upstream "get started" doc
+#   dependsOn:      (optional) list of flow ids this flow logically depends
+#                   on. Used by CmdPal to render "Requires: <id>" in the
+#                   entry description (and, later, to chain installs).
+#                   Not consumed by CI today; the discover step still treats
+#                   each flow as independently runnable. Every id listed
+#                   here MUST also appear as a flow id elsewhere in this
+#                   file — there is no enforcement yet, but reviewers should
+#                   reject typos.
+#
+#   # CI (consumed by the build-run-diff harness)
+#   os:             list of OSes this flow supports: "windows" and/or "linux"
+#   manual_test:    (optional, default false) when true, the flow is excluded
+#                   from automated CI matrices — typically because the hello
+#                   world cannot run on a headless GitHub runner (e.g. GUI apps
+#                   that need an interactive desktop session). The flow still
+#                   shows up in the CmdPal extension and in the CI summary
+#                   under a "manual" bucket.
+#   windows:        (object, required if "windows" in os)
+#     install:        path to PowerShell install shim (CI runs this)
+#     configuration:  (optional) path to winget DSC configuration.winget the
+#                     extension applies via `winget configure`. Defaults to
+#                     "<dir of install>/configuration.winget" when omitted.
+#     build:          shell command to build the hello world (run from repo
+#                     root). "" to skip.
+#     run:            shell command whose stdout is compared to "expected"
+#     expected:       path to expected-stdout file
+#     version:        (optional) command printed at the end as a smoke signal
+#   linux:          (object, required if "linux" in os) — same shape as windows.
+
+flows:
+  - id: typescript
+    name: TypeScript
+    description: Node.js LTS + TypeScript compiler
+    category: languages
+    tags: [typescript, node, javascript, npm]
+    icon: 🟦
+    onboardingUrl: https://www.typescriptlang.org/download
+    os: [windows]
+    windows:
+      install: Workloads/typescript/install.ps1
+      configuration: Workloads/typescript/configuration.winget
+      build: tsc tests/typescript/hello.ts
+      run: node tests/typescript/hello.js
+      expected: tests/typescript/expected.txt
+      version: "node --version; tsc --version"
+
+  - id: php
+    name: PHP
+    description: PHP runtime and CLI
+    category: languages
+    tags: [php, web, scripting]
+    icon: 🐘
+    onboardingUrl: https://www.php.net/manual/en/install.windows.php
+    os: [windows]
+    windows:
+      install: Workloads/php/install.ps1
+      configuration: Workloads/php/configuration.winget
+      build: ""
+      run: php tests/php/hello.php
+      expected: tests/php/expected.txt
+      version: "php --version"
+
+  - id: winforms
+    name: WinForms
+    description: .NET SDK with Windows Forms desktop workload
+    category: desktop
+    tags: [dotnet, csharp, winforms, windows, desktop]
+    icon: 🪟
+    onboardingUrl: https://learn.microsoft.com/en-us/dotnet/desktop/winforms/overview/
+    # Excluded from the automated matrix because the install pulls the .NET
+    # desktop workload (effectively the Visual Studio build tools), which is
+    # multi-GB and dominates the CI minute budget. Verified working locally
+    # and in a one-off CI run; humans can still execute the flow on demand.
+    manual_test: true
+    os: [windows]
+    windows:
+      install: Workloads/winforms/install.ps1
+      configuration: Workloads/winforms/configuration.winget
+      build: dotnet build tests/winforms/hello.csproj -c Release -v q --nologo -o tests/winforms/bin
+      run: tests\winforms\bin\hello.exe
+      expected: tests/winforms/expected.txt
+      version: "dotnet --version"
+
+  - id: winui
+    name: WinUI 3
+    description: .NET SDK with Windows App SDK / WinUI 3 for modern Windows apps
+    category: desktop
+    tags: [dotnet, csharp, winui, windows, desktop, windowsappsdk]
+    icon: 🪟
+    onboardingUrl: https://learn.microsoft.com/en-us/windows/apps/winui/winui3/
+    # WinUI hello world needs an interactive desktop session to actually run;
+    # CI only validates that the configuration applies cleanly. The build/run
+    # fields stay populated so a human can execute the flow locally.
+    manual_test: true
+    os: [windows]
+    windows:
+      install: Workloads/winui/install.ps1
+      configuration: Workloads/winui/configuration.winget
+      build: dotnet build tests/winui/hello.csproj -c Release -v q --nologo -o tests/winui/bin
+      run: tests\winui\bin\hello.exe
+      expected: tests/winui/expected.txt
+      version: "dotnet --version"
+
+  - id: dotnet
+    name: .NET
+    description: .NET 10 SDK (cross-platform; foundation for the web-api-csharp scenario)
+    category: languages
+    tags: [dotnet, csharp, fsharp, net]
+    icon: 🟣
+    onboardingUrl: https://learn.microsoft.com/en-us/dotnet/core/install/windows
+    os: [windows]
+    windows:
+      install: Workloads/dotnet/install.ps1
+      configuration: Workloads/dotnet/configuration.winget
+      build: dotnet build tests/dotnet/hello.csproj -c Release -v q --nologo -o tests/dotnet/bin
+      run: tests\dotnet\bin\hello.exe
+      expected: tests/dotnet/expected.txt
+      version: "dotnet --version"
+
+  - id: go
+    name: Go
+    description: Go toolchain (foundation for the cli-go scenario)
+    category: languages
+    tags: [go, golang]
+    icon: 🐹
+    onboardingUrl: https://go.dev/doc/install
+    os: [windows]
+    windows:
+      install: Workloads/go/install.ps1
+      configuration: Workloads/go/configuration.winget
+      build: ""
+      run: go run tests/go/hello.go
+      expected: tests/go/expected.txt
+      version: "go version"
+
+  - id: java
+    name: Java
+    description: Microsoft Build of OpenJDK 21 LTS (foundation for the web-api-java scenario)
+    category: languages
+    tags: [java, jdk, openjdk, jvm]
+    icon: ☕
+    onboardingUrl: https://learn.microsoft.com/en-us/java/openjdk/install
+    os: [windows]
+    windows:
+      install: Workloads/java/install.ps1
+      configuration: Workloads/java/configuration.winget
+      build: ""
+      run: java tests/java/Hello.java
+      expected: tests/java/expected.txt
+      version: "java -version"
+
+  - id: rust
+    name: Rust
+    description: Rust stable toolchain via rustup (foundation for the cli-rust scenario)
+    category: languages
+    tags: [rust, cargo, rustc, rustup]
+    icon: 🦀
+    onboardingUrl: https://www.rust-lang.org/tools/install
+    os: [windows]
+    windows:
+      install: Workloads/rust/install.ps1
+      configuration: Workloads/rust/configuration.winget
+      build: cargo build --release --manifest-path tests/rust/Cargo.toml --quiet
+      run: tests\rust\target\release\hello.exe
+      expected: tests/rust/expected.txt
+      version: "rustc --version; cargo --version"
+
+  - id: python
+    name: Python
+    description: CPython 3.13 + uv package manager
+    category: languages
+    tags: [python, uv, scripting]
+    icon: 🐍
+    onboardingUrl: https://docs.python.org/3/using/windows.html
+    os: [windows]
+    windows:
+      install: Workloads/python/install.ps1
+      configuration: Workloads/python/configuration.winget
+      build: ""
+      run: python tests/python/hello.py
+      expected: tests/python/expected.txt
+      version: "python --version; uv --version"
+
+  - id: comfort-shell
+    name: Comfort Shell
+    description: Cozy WSL shell setup — zsh/bash, starship, modern CLI tools, and shims
+    category: user-experience
+    tags: [user-experience, wsl, zsh, bash, shell, starship, homebrew, terminal, nerd-font]
+    icon: 😎
+    requiresWsl: true
+    # The bootstrap runs entirely inside a WSL distro; cannot be tested on
+    # headless CI without a distro present. manual_test keeps it out of the
+    # automated matrix while still surfacing it in CmdPal.
+    manual_test: true
+    os: [windows]
+    windows:
+      install: "Wsl Comfort/install.ps1"
+      build: ""
+      run: wsl -- bash tests/comfort-shell/hello.sh
+      expected: tests/comfort-shell/expected.txt
+      version: "wsl --status"
+
+  - id: calm-os
+    name: Calm OS
+    description: Distraction-free dev workstation — apps + OS settings + WSL, all in one DSC
+    category: user-experience
+    tags: [user-experience, calm-os, distraction-free, taskbar, wsl, ubuntu]
+    icon: 🧘
+    onboardingUrl: https://dev.windows.com
+    # Heavy machine-state changes (Sudo, Recall off, Click To Do off, WSL +
+    # Ubuntu install with a forced reboot, etc.) — keep out of the automated
+    # matrix. The probe under tests/calm-os/probe.ps1 is for a human running
+    # the flow locally; it asserts that `git` resolves on PATH after the
+    # install (the apps module's first dep) as a fast smoke signal.
+    manual_test: true
+    os: [windows]
+    windows:
+      install: "Windows Dev Config/install.ps1"
+      configuration: "Windows Dev Config/dev-config.winget"
+      build: ""
+      run: pwsh -NoProfile -File tests/calm-os/probe.ps1
+      expected: tests/calm-os/expected.txt
+      version: "git --version"
+
+# Curated bundles of flows. Surfaced by the Command Palette extension; not
+# consumed by CI today.
+combos: []
+
+# Persona bundles (e.g. "frontend developer"). Surfaced by the Command Palette
+# extension; not consumed by CI today.
+personas: []
