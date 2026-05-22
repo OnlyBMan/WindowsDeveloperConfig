@@ -1,0 +1,329 @@
+name: CI
+
+# Validates developer-flow install scripts end-to-end by:
+#   1. Running the install script on a fresh GitHub-hosted runner.
+#   2. Building + running the matching "hello world".
+#   3. Asserting its stdout matches the checked-in expected output.
+#
+# Flows are declared in /manifest.yml. Adding a language = one entry there +
+# an install script + a hello-world under tests/. No edits to this file.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Nightly at 07:00 UTC, catches upstream winget/apt breakage with no commits.
+    - cron: '0 7 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job A: parse manifest.yml → matrices for per-OS flow jobs.
+  # ---------------------------------------------------------------------------
+  discover:
+    name: Discover flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      windows:       ${{ steps.plan.outputs.windows }}
+      windows_count: ${{ steps.plan.outputs.windows_count }}
+      linux:         ${{ steps.plan.outputs.linux }}
+      linux_count:   ${{ steps.plan.outputs.linux_count }}
+      manual:        ${{ steps.plan.outputs.manual }}
+      manual_count:  ${{ steps.plan.outputs.manual_count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Plan matrices from manifest.yml
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, sys, yaml
+
+          with open("src/manifest.yml", "r", encoding="utf-8") as f:
+              doc = yaml.safe_load(f) or {}
+
+          flows = doc.get("flows", []) or []
+
+          # Flows marked manual_test: true are excluded from the automated
+          # matrices (their hello world cannot run on a headless runner). They
+          # still surface in the run summary under a "manual" bucket.
+          auto_flows   = [f for f in flows if not f.get("manual_test")]
+          manual_flows = [f for f in flows if     f.get("manual_test")]
+
+          def entries_for(flow_list, os_name):
+              out = []
+              for flow in flow_list:
+                  if os_name not in (flow.get("os") or []):
+                      continue
+                  spec = flow.get(os_name) or {}
+                  required = ["install", "run", "expected"]
+                  missing = [k for k in required if not spec.get(k)]
+                  if missing:
+                      raise SystemExit(
+                          f"flow '{flow.get('id')}' missing {missing} for os '{os_name}'"
+                      )
+                  out.append({
+                      "id":       flow["id"],
+                      "install":  spec["install"],
+                      "build":    spec.get("build", "") or "",
+                      "run":      spec["run"],
+                      "expected": spec["expected"],
+                      "version":  spec.get("version", "") or "",
+                  })
+              return out
+
+          win = entries_for(auto_flows, "windows")
+          lin = entries_for(auto_flows, "linux")
+
+          manual = [
+              {"id": f["id"], "os": ",".join(f.get("os") or [])}
+              for f in manual_flows
+          ]
+
+          print("windows=" + json.dumps({"include": win}))
+          print("windows_count=" + str(len(win)))
+          print("linux=" + json.dumps({"include": lin}))
+          print("linux_count=" + str(len(lin)))
+          print("manual=" + json.dumps(manual))
+          print("manual_count=" + str(len(manual)))
+          PY
+
+      - name: Show plan
+        shell: bash
+        run: |
+          echo "Windows flows (${{ steps.plan.outputs.windows_count }}):"
+          echo '${{ steps.plan.outputs.windows }}' | python3 -m json.tool
+          echo "Linux flows (${{ steps.plan.outputs.linux_count }}):"
+          echo '${{ steps.plan.outputs.linux }}' | python3 -m json.tool
+          echo "Manual-test flows (${{ steps.plan.outputs.manual_count }}):"
+          echo '${{ steps.plan.outputs.manual }}' | python3 -m json.tool
+
+  # ---------------------------------------------------------------------------
+  # Job B: run each Windows flow end-to-end.
+  # ---------------------------------------------------------------------------
+  windows-flow:
+    name: win / ${{ matrix.id }}
+    needs: discover
+    if: ${{ needs.discover.outputs.windows_count != '0' }}
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.windows) }}
+    env:
+      FLOW_ID:       ${{ matrix.id }}
+      FLOW_INSTALL:  ${{ matrix.install }}
+      FLOW_BUILD:    ${{ matrix.build }}
+      FLOW_RUN:      ${{ matrix.run }}
+      FLOW_EXPECTED: ${{ matrix.expected }}
+      FLOW_VERSION:  ${{ matrix.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Preflight
+        shell: pwsh
+        run: ./src/Workloads/_common/preflight.ps1
+
+      - name: winget list (before)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path diagnostics | Out-Null
+          winget list --source winget --disable-interactivity |
+            Tee-Object -FilePath diagnostics/winget-before.txt
+
+      - name: Install flow (${{ matrix.id }})
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path diagnostics | Out-Null
+          $transcript = "diagnostics/install-$env:FLOW_ID.log"
+          Start-Transcript -Path $transcript -Force | Out-Null
+          try {
+              & $env:FLOW_INSTALL
+              if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+                  throw "install script exited with code $LASTEXITCODE"
+              }
+          } finally {
+              Stop-Transcript | Out-Null
+          }
+
+      - name: Refresh PATH
+        shell: pwsh
+        run: |
+          . ./src/Workloads/_common/refresh-path.ps1
+          "PATH=$env:Path" | Out-File -Encoding utf8 -Append diagnostics/env.txt
+          # Propagate the refreshed PATH to later steps.
+          "Path=$env:Path" | Out-File -Encoding utf8 -Append $env:GITHUB_ENV
+
+      - name: Run harness (build + run + diff)
+        shell: pwsh
+        run: |
+          ./src/tests/_harness/run-flow.ps1 `
+              -Id       $env:FLOW_ID `
+              -Build    $env:FLOW_BUILD `
+              -Run      $env:FLOW_RUN `
+              -Expected $env:FLOW_EXPECTED
+
+      - name: winget list (after)
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path diagnostics | Out-Null
+          winget list --source winget --disable-interactivity |
+            Tee-Object -FilePath diagnostics/winget-after.txt
+
+      - name: Tool versions (smoke)
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:FLOW_VERSION)) {
+              Write-Host 'No version command declared for this flow.'
+          } else {
+              # Use pwsh's Invoke-Expression (not cmd.exe /c) so that
+              # multi-command version strings like `node --version; tsc --version`
+              # actually split on `;`. cmd.exe does not treat `;` as a command
+              # separator — it would pass `--version;` as a single arg to node,
+              # which then errors with `bad option: --version;`. pwsh matches
+              # the Linux side of this step, which uses `bash -c "$FLOW_VERSION"`.
+              Invoke-Expression $env:FLOW_VERSION
+          }
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-${{ matrix.id }}-diagnostics
+          path: diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Job C: Linux parity. Wired up so future milestones only need manifest + scripts.
+  # ---------------------------------------------------------------------------
+  linux-flow:
+    name: linux / ${{ matrix.id }}
+    needs: discover
+    if: ${{ needs.discover.outputs.linux_count != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.linux) }}
+    env:
+      FLOW_ID:       ${{ matrix.id }}
+      FLOW_INSTALL:  ${{ matrix.install }}
+      FLOW_BUILD:    ${{ matrix.build }}
+      FLOW_RUN:      ${{ matrix.run }}
+      FLOW_EXPECTED: ${{ matrix.expected }}
+      FLOW_VERSION:  ${{ matrix.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install flow (${{ matrix.id }})
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x "$FLOW_INSTALL"
+          "$FLOW_INSTALL"
+
+      - name: Run harness (build + run + diff)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$FLOW_BUILD" ]; then
+              echo "> $FLOW_BUILD"
+              bash -c "$FLOW_BUILD"
+          fi
+          echo "> $FLOW_RUN"
+          actual="$(bash -c "$FLOW_RUN")"
+          expected="$(cat "$FLOW_EXPECTED")"
+          # Normalize: strip CR and trailing whitespace on each line, trim trailing blanks.
+          norm() { tr -d '\r' | sed -e 's/[[:space:]]*$//' | awk 'NF{p=1} p' | awk '{a[NR]=$0} END{for(i=1;i<=NR;i++) print a[i]}'; }
+          a="$(printf '%s' "$actual"   | norm)"
+          e="$(printf '%s' "$expected" | norm)"
+          if [ "$a" != "$e" ]; then
+              echo '--- expected ---'; printf '%s\n' "$e"
+              echo '--- actual ---';   printf '%s\n' "$a"
+              echo "Flow '$FLOW_ID' stdout did not match expected output in $FLOW_EXPECTED" >&2
+              exit 1
+          fi
+          echo "FLOW_OK: $FLOW_ID"
+
+      - name: Tool versions (smoke)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ -z "$FLOW_VERSION" ]; then
+              echo 'No version command declared for this flow.'
+          else
+              bash -c "$FLOW_VERSION"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job E: aggregate result table into the run summary. (Job D — Windows
+  # configuration — is a future milestone and not yet wired up.)
+  # ---------------------------------------------------------------------------
+  summary:
+    name: Summary
+    needs: [discover, windows-flow, linux-flow]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Write summary
+        shell: bash
+        env:
+          WIN_RESULT:   ${{ needs.windows-flow.result }}
+          LIN_RESULT:   ${{ needs.linux-flow.result }}
+          WIN_COUNT:    ${{ needs.discover.outputs.windows_count }}
+          LIN_COUNT:    ${{ needs.discover.outputs.linux_count }}
+          MANUAL_COUNT: ${{ needs.discover.outputs.manual_count }}
+          MANUAL_JSON:  ${{ needs.discover.outputs.manual }}
+        run: |
+          icon() {
+            case "$1" in
+              success)   echo '✅' ;;
+              failure)   echo '❌' ;;
+              cancelled) echo '⚪' ;;
+              skipped)   echo '➖' ;;
+              *)         echo "⚠️ ($1)" ;;
+            esac
+          }
+          {
+            echo "# Dev flow CI"
+            echo
+            echo "| OS      | Flows | Result |"
+            echo "| ------- | ----- | ------ |"
+            echo "| Windows | $WIN_COUNT | $(icon "$WIN_RESULT") \`$WIN_RESULT\` |"
+            echo "| Linux   | $LIN_COUNT | $(icon "$LIN_RESULT") \`$LIN_RESULT\` |"
+            echo "| Manual  | $MANUAL_COUNT | 🙋 \`manual_test\` (not executed in CI) |"
+            echo
+            if [ "${MANUAL_COUNT:-0}" != "0" ]; then
+              echo "### Manual-test flows"
+              echo
+              echo "| ID | OS |"
+              echo "| -- | -- |"
+              echo "$MANUAL_JSON" | jq -r '.[] | "| `\(.id)` | \(.os) |"'
+              echo
+            fi
+            echo "See the individual matrix jobs above for per-flow detail."
+          } >> "$GITHUB_STEP_SUMMARY"

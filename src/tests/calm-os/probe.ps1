@@ -1,0 +1,30 @@
+# Smoke-test probe for the calm-os user-experience flow.
+#
+# After the master config has been applied, the apps module installs
+# git via winget. The simplest signal a human can use to confirm the
+# flow worked is: does `git --version` exit 0 after the run? If so,
+# the apps module reached completion (git is the first dep in the
+# chain). If not, something tripped during install and the user
+# should look at the install transcript.
+#
+# Output: `OK` if git is on PATH and `git --version` exits 0;
+#         throw otherwise (which the harness surfaces as a failure).
+#
+# Why a script file (and not an inline run command in manifest.yml):
+# the inline form is fine for this particular probe, but `tests/<id>/`
+# probe scripts give us room to grow -- for example, asserting that a
+# specific registry value matches an expected state -- without
+# touching the manifest.
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$null = Get-Command git -ErrorAction Stop
+$null = & git --version
+if ($LASTEXITCODE -ne 0) {
+    throw "git --version exited with code $LASTEXITCODE"
+}
+
+Write-Output 'OK'
