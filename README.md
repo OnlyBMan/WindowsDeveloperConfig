@@ -28,6 +28,8 @@ Windows Dev Config is a single DSC configuration that turns a fresh Windows 11 m
 
 **Run it:**
 
+> ⚠️ **This flow may reboot your machine.** Enabling WSL requires an optional feature in Windows to be enabled.  This feature will requires a restart and before WSL can be fully installed. A `RunOnce` task automatically resumes the configuration after sign-in, installs Ubuntu, and completes the run — but expect one hard reboot and ~1 minute of post-login work before the flow finishes. Close other work first.
+
 ```powershell
 winget configure -f .\windows-dev-config\dev-config.winget `
     --accept-configuration-agreements `
