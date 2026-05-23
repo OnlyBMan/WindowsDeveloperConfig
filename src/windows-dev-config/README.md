@@ -197,7 +197,6 @@ HKLM policies, applied via `Microsoft.Windows/Registry`:
 
 | Area | Caveat |
 |------|--------|
-| **Filename mismatch with `install.ps1`** | `install.ps1` in this directory invokes `_common\apply-configuration.ps1` with `-ConfigFile configuration.winget`, but the file is named `dev-config.winget`. Running `install.ps1` will fail on the missing-file check. Apply the config directly with `winget configure -f dev-config.winget …` (see [Usage](#usage)) until either the file is renamed or the shim is updated. |
 | **`acceptAgreements` not on packages** | None of the `Microsoft.WinGet/Package` resources set `acceptAgreements: true`. The header comment compensates by passing `--accept-configuration-agreements` to the CLI invocation, but `--accept-package-agreements` is **not** in the documented command — first-time installs may prompt. Pass it explicitly if you want fully silent. |
 | **WSL reboot** | `RebootForVmp` will hard-reboot the machine via `Restart-Computer -Force`. Save your work before running. The RunOnce key resumes the config on next login. |
 | **Ubuntu first-launch** | After `InstallUbuntu`, you still need to open Ubuntu from the Start menu once to create a UNIX user. Nothing inside the distro is configured by this flow. |
