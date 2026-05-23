@@ -87,9 +87,9 @@ Each workload also has a shim if you want the PATH refresh in the current shell:
 
 ## Command Palette extension
 
-A [PowerToys Command Palette](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/overview) extension lives under [`future/cmdpal/`](./future/cmdpal/). It reads the same flow list as the rest of the repository and surfaces every flow as a launchable entry.
+A [PowerToys Command Palette](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/overview) extension lives under [`src/future/cmdpal/`](./src/future/cmdpal/). It reads the same flow list as the rest of the repository and surfaces every flow as a launchable entry.
 
-See [`future/cmdpal/README.md`](./future/cmdpal/README.md) for build and install instructions.
+See [`src/future/cmdpal/README.md`](./src/future/cmdpal/README.md) for build and install instructions.
 
 ## Troubleshooting
 
@@ -104,4 +104,4 @@ See [`future/cmdpal/README.md`](./future/cmdpal/README.md) for build and install
 
 ## Contributing
 
-For repository layout, CI, and instructions for adding or validating flows, see [`docs/development.md`](./docs/development.md).
+For repository layout, CI, and instructions for adding or validating flows, see [`src/docs/development.md`](./src/docs/development.md).
