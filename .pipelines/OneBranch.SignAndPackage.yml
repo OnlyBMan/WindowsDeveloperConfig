@@ -50,9 +50,9 @@ extends:
                 inputs:
                   SourceFolder: $(Build.SourcesDirectory)
                   Contents: |
-                    src/Windows Dev Config/**
+                    src/windows-dev-config/**
                     src/Workloads/**
-                    src/Wsl Comfort/**
+                    src/wsl-comfort/**
                     src/manifest.yml
                     README.md
                     LICENSE

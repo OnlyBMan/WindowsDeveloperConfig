@@ -46,8 +46,8 @@ extension.
 | Python            | ✅ automated   | `Python.Python.3.13`, `astral-sh.uv`                                                    |
 | WinForms          | 🙋 manual     | `Microsoft.DotNet.SDK.10` + the .NET desktop workload (multi-GB; manual to spare CI minutes) |
 | WinUI 3           | 🙋 manual     | `Microsoft.DotNet.SDK.10`, `Microsoft.VisualStudio.Community`, `Microsoft.WinAppCLI` + WinUI/Universal/ManagedDesktop VS workloads |
-| Calm OS           | 🙋 manual     | A full distraction-free workstation: apps + ~24 registry tweaks + WSL + Ubuntu (see [`Windows Dev Config/README.md`](../Windows%20Dev%20Config/README.md)) |
-| Comfort Shell     | 🙋 manual     | WSL distro + zsh/bash + starship + modern CLI bundle + JetBrainsMono Nerd Font + themed Windows Terminal profile (see [`Wsl Comfort/readme.md`](../Wsl%20Comfort/readme.md)) |
+| Calm OS           | 🙋 manual     | A full distraction-free workstation: apps + ~24 registry tweaks + WSL + Ubuntu (see [`windows-dev-config/README.md`](../windows-dev-config/README.md)) |
+| Comfort Shell     | 🙋 manual     | WSL distro + zsh/bash + starship + modern CLI bundle + JetBrainsMono Nerd Font + themed Windows Terminal profile (see [`wsl-comfort/readme.md`](../wsl-comfort/readme.md)) |
 
 See [`manifest.yml`](../manifest.yml) for the canonical declarative
 list (paths, build/run commands, onboarding URLs).
@@ -78,8 +78,8 @@ Workloads/
   rust/            # configuration.winget (core) + install.ps1 (thin shim)
   winforms/        # configuration.winget (core) + install.ps1 (thin shim)
   winui/           # configuration.winget (core) + install.ps1 (thin shim)
-Windows Dev Config/    # Calm OS — dev-config.winget (single-file DSC) + install.ps1 + README.md
-Wsl Comfort/           # Comfort Shell — install.ps1 (Windows side) + comfort-shell-bootstrap.sh (Linux side, self-contained) + readme.md
+windows-dev-config/    # Calm OS — dev-config.winget (single-file DSC) + install.ps1 + README.md
+wsl-comfort/           # Comfort Shell — install.ps1 (Windows side) + comfort-shell-bootstrap.sh (Linux side, self-contained) + readme.md
 tests/
   _harness/          # build-run-diff harness used by CI:
                      #   run-flow.ps1   - all flows (build + run + diff stdout)

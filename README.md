@@ -26,14 +26,14 @@ Windows Dev Config is a single DSC configuration that turns a fresh Windows 11 m
 **Run it:**
 
 ```powershell
-winget configure -f ".\Windows Dev Config\dev-config.winget" `
+winget configure -f .\windows-dev-config\dev-config.winget `
     --accept-configuration-agreements `
     --disable-interactivity
 ```
 
 The flow is idempotent and safe to re-run on an existing machine to apply updates or correct drift.
 
-Full details: [`Windows Dev Config/README.md`](./Windows%20Dev%20Config/README.md)
+Full details: [`windows-dev-config/README.md`](./windows-dev-config/README.md)
 
 ## WSL Comfort (Comfort Shell)
 
@@ -52,14 +52,14 @@ WSL Comfort is a two-part installer for a Windows + WSL shell environment. The W
 **Run it:**
 
 ```powershell
-& ".\Wsl Comfort\install.ps1"
+.\wsl-comfort\install.ps1
 ```
 
 Interactive by default. Use `-NonInteractive` for unattended runs; the bootstrap also accepts `--minimal` for a smaller setup.
 
 The Linux half remains standalone: you can copy `comfort-shell-bootstrap.sh` onto any Ubuntu host and run it independently.
 
-Full details: [`Wsl Comfort/readme.md`](./Wsl%20Comfort/readme.md)
+Full details: [`wsl-comfort/readme.md`](./wsl-comfort/readme.md)
 
 ## Single-language workloads
 
@@ -96,7 +96,7 @@ See [`src/future/cmdpal/README.md`](./src/future/cmdpal/README.md) for build and
 - **"Unrecognized command: configure"** - run `winget configure --enable`. If `winget configure` is still unavailable, see [`Workloads/_common/assert-winget-configure.ps1`](./Workloads/_common/assert-winget-configure.ps1).
 - **A workload says it succeeded but `python` / `node` / similar commands are not on PATH in this window.** Open a new terminal, or use the matching `install.ps1` shim to refresh PATH in the current session.
 - **Windows Dev Config rebooted the machine and appears to have stopped.** It registers a `RunOnce` entry so `winget configure` resumes after you sign back in.
-- **WSL is missing when you tried to run the Comfort Shell bootstrap directly.** Use `& ".\Wsl Comfort\install.ps1"` on Windows so the flow can install WSL first.
+- **WSL is missing when you tried to run the Comfort Shell bootstrap directly.** Use `.\wsl-comfort\install.ps1` on Windows so the flow can install WSL first.
 
 ## Repo layout: signed vs source
 
