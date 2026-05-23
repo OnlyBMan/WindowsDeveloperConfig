@@ -41,7 +41,7 @@ extends:
                   command: sign
                   signing_environment: azure_devops
                   signing_profile: external_distribution
-                  files_to_sign: scripts/windows/**/*.ps1
+                  files_to_sign: src/**/*.ps1
 
               # Collect signed PS1 scripts, winget DSC configuration files,
               # and top-level release files into the output directory.
@@ -50,8 +50,10 @@ extends:
                 inputs:
                   SourceFolder: $(Build.SourcesDirectory)
                   Contents: |
-                    scripts/windows/**/*.ps1
-                    scripts/windows/**/*.winget
+                    src/Windows Dev Config/**
+                    src/Workloads/**
+                    src/Wsl Comfort/**
+                    src/manifest.yml
                     README.md
                     LICENSE
                   TargetFolder: $(ob_outputDirectory)
