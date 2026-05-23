@@ -1,5 +1,8 @@
 # Windows Dev Setup Scripts
 
+[![CI](https://github.com/microsoft/WindowsDeveloperConfig/actions/workflows/ci.yml/badge.svg)](https://github.com/microsoft/WindowsDeveloperConfig/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 This repository packages a small set of idempotent `winget configure` flows for setting up Windows developer machines. Its two primary flows are Windows Dev Config, which applies a curated workstation setup with developer tools, Windows settings, and WSL + Ubuntu, and WSL Comfort, which provisions a configurable WSL shell environment and a matching Windows Terminal profile. The same manifest also drives the single-language workloads and the Command Palette extension.
 
 ## Prerequisites
@@ -127,6 +130,10 @@ This repo carries **two parallel copies** of every flow:
 - Don't expect the two trees to be byte-identical. The signed copies carry an Authenticode signature block (`# SIG # Begin signature block` … `# SIG # End signature block`); the bodies above that marker should match what's in `src/`. They will diverge for the window between a `src/` change landing on `main` and the next sign cycle catching up.
 - Don't add a third copy of anything. Both copies exist for one reason only — to ship signed PS1s without losing the unsigned source — and any new flow or shared script lives only in `src/` until the sign pipeline mirrors it.
 - 
+## Reporting issues
+
+Found a bug, a stale doc, or a flow that fails on your machine? File an issue at [github.com/microsoft/WindowsDeveloperConfig/issues](https://github.com/microsoft/WindowsDeveloperConfig/issues). Please include your Windows build (`winver`), the exact command you ran, and the failing output.
+
 ## License
 
 [MIT](./LICENSE).
