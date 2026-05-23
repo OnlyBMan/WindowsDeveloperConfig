@@ -91,6 +91,13 @@ A [PowerToys Command Palette](https://learn.microsoft.com/en-us/windows/powertoy
 
 See [`src/future/cmdpal/README.md`](./src/future/cmdpal/README.md) for build and install instructions.
 
+## Troubleshooting
+
+- **"Unrecognized command: configure"** - run `winget configure --enable`. If `winget configure` is still unavailable, see [`Workloads/_common/assert-winget-configure.ps1`](./Workloads/_common/assert-winget-configure.ps1).
+- **A workload says it succeeded but `python` / `node` / similar commands are not on PATH in this window.** Open a new terminal, or use the matching `install.ps1` shim to refresh PATH in the current session.
+- **Windows Dev Config rebooted the machine and appears to have stopped.** It registers a `RunOnce` entry so `winget configure` resumes after you sign back in.
+- **WSL is missing when you tried to run the Comfort Shell bootstrap directly.** Use `& ".\Wsl Comfort\install.ps1"` on Windows so the flow can install WSL first.
+
 ## Repo layout: signed vs source
 
 This repo carries **two parallel copies** of every flow:
@@ -119,14 +126,7 @@ This repo carries **two parallel copies** of every flow:
 - Don't edit a top-level signed copy directly. The next sign cycle will overwrite it, and the cycle signs `src/`, not the top level.
 - Don't expect the two trees to be byte-identical. The signed copies carry an Authenticode signature block (`# SIG # Begin signature block` … `# SIG # End signature block`); the bodies above that marker should match what's in `src/`. They will diverge for the window between a `src/` change landing on `main` and the next sign cycle catching up.
 - Don't add a third copy of anything. Both copies exist for one reason only — to ship signed PS1s without losing the unsigned source — and any new flow or shared script lives only in `src/` until the sign pipeline mirrors it.
-
-## Troubleshooting
-
-- **"Unrecognized command: configure"** - run `winget configure --enable`. If `winget configure` is still unavailable, see [`Workloads/_common/assert-winget-configure.ps1`](./Workloads/_common/assert-winget-configure.ps1).
-- **A workload says it succeeded but `python` / `node` / similar commands are not on PATH in this window.** Open a new terminal, or use the matching `install.ps1` shim to refresh PATH in the current session.
-- **Windows Dev Config rebooted the machine and appears to have stopped.** It registers a `RunOnce` entry so `winget configure` resumes after you sign back in.
-- **WSL is missing when you tried to run the Comfort Shell bootstrap directly.** Use `& ".\Wsl Comfort\install.ps1"` on Windows so the flow can install WSL first.
-
+- 
 ## License
 
 [MIT](./LICENSE).
