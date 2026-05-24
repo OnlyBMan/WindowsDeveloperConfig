@@ -103,6 +103,35 @@ future/
   ci.yml             # discover -> per-OS matrix -> summary
 ```
 
+## Repo layout: signed vs source
+
+This repo carries **two parallel copies** of every flow:
+
+| Path                          | What it is                                                        | Edit it? | Run it?  |
+| ----------------------------- | ----------------------------------------------------------------- | -------- | -------- |
+| `windows-dev-config/`         | **Signed release copy** (Authenticode).                           | No       | **Yes**  |
+| `Workloads/`                  | **Signed release copy** of every single-language workload.        | No       | **Yes**  |
+| `wsl-comfort/`                | **Signed release copy**.                                          | No       | **Yes**  |
+| `src/windows-dev-config/`     | Source. CI runs from here.                                        | **Yes**  | Yes      |
+| `src/Workloads/`              | Source. CI runs from here.                                        | **Yes**  | Yes      |
+| `src/wsl-comfort/`            | Source. CI runs from here.                                        | **Yes**  | Yes      |
+| `src/manifest.yml`            | Single source-of-truth for every flow (paths, build/run, ids).    | **Yes**  | n/a      |
+| `src/future/cmdpal/`          | Command Palette extension. C# project. Reads `src/manifest.yml`.  | **Yes**  | n/a      |
+| `src/docs/development.md`     | Contributor docs (CI, validation, how to add a language).         | **Yes**  | n/a      |
+| `src/tests/`                  | Hello-world programs + expected stdout used by the CI harness.    | **Yes**  | CI only  |
+
+**End users**: the commands in the top-level [README](../../README.md) point at the **top-level signed copies** on purpose. If you're following the README on a Windows box you don't need to know `src/` exists. Every `winget configure -f .\windows-dev-config\dev-config.winget`-style invocation in the README is correct as written.
+
+**Contributors**: edit `src/`. The top-level paths are **regenerated** by [`.pipelines/OneBranch.SignAndPackage.yml`](../../.pipelines/OneBranch.SignAndPackage.yml), which Authenticode-signs every `src/**/*.ps1` and ships them (plus the `.winget` configs and the manifest) as the release artifact. The signed copies were merged into `main` from the `signed` branch in [PR #6](https://github.com/microsoft/WindowsDeveloperConfig/pull/6). A change to a `src/` script becomes a new signed top-level copy on the next sign cycle, not at PR merge, so the two can briefly disagree on a script's body until that cycle runs.
+
+**CI**: GitHub Actions ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) runs the **unsigned `src/` copies** (e.g. `./src/Workloads/_common/preflight.ps1`). This is intentional: CI exercises what contributors edit; signing is a release-time concern, not a build-time one.
+
+**Don't**:
+
+- Don't edit a top-level signed copy directly. The next sign cycle will overwrite it, and the cycle signs `src/`, not the top level.
+- Don't expect the two trees to be byte-identical. The signed copies carry an Authenticode signature block (`# SIG # Begin signature block` … `# SIG # End signature block`); the bodies above that marker should match what's in `src/`. They will diverge for the window between a `src/` change landing on `main` and the next sign cycle catching up.
+- Don't add a third copy of anything. Both copies exist for one reason only (to ship signed PS1s without losing the unsigned source), and any new flow or shared script lives only in `src/` until the sign pipeline mirrors it.
+
 ## Prerequisites (Windows)
 
 Every flow — and the [Command Palette extension](../future/cmdpal/) — installs
