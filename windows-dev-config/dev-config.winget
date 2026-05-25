@@ -89,6 +89,32 @@ resources:
     description: Set PowerShell 7 as the default Windows Terminal profile
 
 # =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
+# Force darktheme
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: darkTheme
+  dependsOn:
+    - PowerShell
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+        Start-Process -FilePath "C:\Windows\Resources\Themes\dark.theme"
+ 
+        # Settings will pop open to show the theme applied; close it after a moment:
+        Start-Sleep -Seconds 2
+        Stop-Process -Name SystemSettings -Force -ErrorAction SilentlyContinue
+      treatAsArray: true
+  metadata:
+    description: Sets dark theme
+
+# =============================================================================
 # Registry — HKLM keys (elevated, native v3 Microsoft.Windows/Registry)
 # =============================================================================
 
@@ -123,32 +149,6 @@ resources:
       DWord: 1
   metadata:
     description: Enable Developer Mode (sideload + dev features)
-
-# Dark theme - apps (replaces Microsoft.Windows.Settings AppColorMode:Dark)
-- type: Microsoft.Windows/Registry
-  name: DarkThemeApps
-  dependsOn:
-  - ElevationCheck
-  properties:
-    keyPath: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize
-    valueName: AppsUseLightTheme
-    valueData:
-      DWord: 0
-  metadata:
-    description: Use dark theme for apps
-
-# Dark theme - system (replaces Microsoft.Windows.Settings SystemColorMode:Dark)
-- type: Microsoft.Windows/Registry
-  name: DarkThemeSystem
-  dependsOn:
-  - ElevationCheck
-  properties:
-    keyPath: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize
-    valueName: SystemUsesLightTheme
-    valueData:
-      DWord: 0
-  metadata:
-    description: Use dark theme for system chrome
 
 # Long path support (replaces Microsoft.Windows.Developer/EnableLongPathSupport)
 - type: Microsoft.Windows/Registry
