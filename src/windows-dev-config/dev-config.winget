@@ -702,3 +702,38 @@ resources:
     _exist: true
   metadata:
     description: Disable PowerToys AOT notifications
+
+# =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
+# Windows Terminal Default Profile 
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: ohMyPoshProfileSet
+  dependsOn:
+    - OhMyPosh
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+         $line = 'oh-my-posh init pwsh | Invoke-Expression'
+ 
+          if (-not (Test-Path $PROFILE)) {
+              New-Item -Path $PROFILE -ItemType File -Force | Out-Null
+          }
+ 
+          if (-not (Select-String -Path $PROFILE -Pattern ([regex]::Escape($line)) -Quiet)) {
+              Add-Content -Path $PROFILE -Value "`n$line"
+              Write-Host "Added oh-my-posh init to $PROFILE"
+          } else {
+              Write-Host "oh-my-posh init already present in $PROFILE"
+          }
+ 
+          . $PROFILE
+      treatAsArray: true
+  metadata:
+    description: Setup OhMyPosh in PowerShell 7
