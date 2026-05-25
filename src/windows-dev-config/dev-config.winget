@@ -63,6 +63,124 @@ resources:
 # Script-Based Items (RunCommandOnSet)
 # PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
 #
+# Include Oh My Posh in PS profile
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: InstallCascadiaCodeNerdFonts 
+  dependsOn:
+    - PowerShell
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+          $ErrorActionPreference = 'Stop'
+ 
+          $Version = '2407.24'
+          $WantedFonts = @(
+              'CascadiaCodeNF.ttf',
+              'CascadiaCodeNFItalic.ttf',
+              'CascadiaMonoNF.ttf',
+              'CascadiaMonoNFItalic.ttf'
+          )
+
+          $zipUrl  = "https://github.com/microsoft/cascadia-code/releases/download/v$Version/CascadiaCode-$Version.zip"
+          $workDir = Join-Path $env:TEMP "CascadiaCode-$Version"
+          $zipPath = Join-Path $workDir 'CascadiaCode.zip'
+          New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+
+          $fontsDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+          $regPath  = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+          New-Item -ItemType Directory -Path $fontsDir -Force | Out-Null
+
+          Write-Host "Downloading $zipUrl ..."
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          Add-Type -AssemblyName System.Drawing
+
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+              foreach ($name in $WantedFonts) {
+                  $entry = $zip.Entries | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+                  if (-not $entry) { Write-Warning "Not found in archive: $name"; continue }
+
+                  $dest = Join-Path $fontsDir $name
+                  Write-Host "Installing $name -> $dest"
+                  [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+
+                  $pfc = New-Object System.Drawing.Text.PrivateFontCollection
+                  try {
+                      $pfc.AddFontFile($dest)
+                      $family = $pfc.Families[0].Name
+                  } finally { $pfc.Dispose() }
+
+                  $regName = "$family (TrueType)"
+                  New-ItemProperty -Path $regPath -Name $regName -Value $dest -PropertyType String -Force | Out-Null
+                  Write-Host "  registered as '$regName'"
+              }
+          }
+          finally {
+              $zip.Dispose()
+          }
+
+          Remove-Item $zipPath -Force
+          Write-Host "`nDone. Restart any running apps (terminal, editors) to pick up the new fonts."
+      treatAsArray: true
+  metadata:
+    description: Install Cascadia Code Nerd Fonts
+
+# =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
+# Include Oh My Posh in PS profile
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: SetCascadiaNfAsDefault
+  dependsOn:
+    - InstallCascadiaCodeNerdFonts
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+          $fontFace = 'Cascadia Mono NF'
+
+          $settingsPath =
+              @(Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -ErrorAction SilentlyContinue |
+                  ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }) +
+              "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json" |
+              Where-Object { Test-Path $_ } |
+              Select-Object -First 1
+
+          if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
+          Write-Host "Using: $settingsPath"
+
+          Copy-Item $settingsPath "$settingsPath.bak" -Force
+
+          $json = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+
+          if (-not $json.profiles)               { $json.profiles = [ordered]@{} }
+          if (-not $json.profiles.defaults)      { $json.profiles.defaults = [ordered]@{} }
+          if (-not $json.profiles.defaults.font) { $json.profiles.defaults.font = [ordered]@{} }
+          $json.profiles.defaults.font.face = $fontFace
+
+          $json | ConvertTo-Json -Depth 32 | Set-Content $settingsPath -Encoding utf8
+          Write-Host "Set font to '$fontFace'  (backup: $settingsPath.bak)"
+      treatAsArray: true
+  metadata:
+    description: Making Cascaida fonts default
+
+# =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
 # Windows Terminal Default Profile 
 # =============================================================================
 - type: Microsoft.DSC.Transitional/RunCommandOnSet
@@ -580,6 +698,18 @@ resources:
     description: Install GitHub CLI
 
 - type: Microsoft.WinGet/Package
+  name: GitHubCopilot
+  dependsOn:
+  - Git
+  - InstallUbuntu
+  properties:
+    id: GitHub.Copilot
+    source: winget
+    useLatest: true
+  metadata:
+    description: Install GitHub Copilot
+
+- type: Microsoft.WinGet/Package
   name: VSCode
   dependsOn:
   - InstallUbuntu
@@ -628,11 +758,22 @@ resources:
   dependsOn:
   - InstallUbuntu
   properties:
-    id: OpenJS.NodeJS
+    id: OpenJS.NodeJS.LTS
     source: winget
     useLatest: true
   metadata:
-    description: Install Node.js 24
+    description: Install Node.js 24 LTS
+
+- type: Microsoft.WinGet/Package
+  name: nvmForNode
+  dependsOn:
+  - InstallUbuntu
+  properties:
+    id: CoreyButler.NVMforWindows
+    source: winget
+    useLatest: true
+  metadata:
+    description: Install NVM
 
 - type: Microsoft.WinGet/Package
   name: OhMyPosh
@@ -644,6 +785,17 @@ resources:
     useLatest: true
   metadata:
     description: Install Oh My Posh (Optional)
+
+- type: Microsoft.WinGet/Package
+  name: winappCli
+  dependsOn:
+  - InstallUbuntu
+  properties:
+    id: Microsoft.winappcli
+    source: winget
+    useLatest: true
+  metadata:
+    description: Install winAppCLI
 
 - type: Microsoft.WinGet/Package
   name: PowerToys
@@ -668,3 +820,38 @@ resources:
     _exist: true
   metadata:
     description: Disable PowerToys AOT notifications
+
+# =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
+# Include Oh My Posh in PS profile
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: ohMyPoshProfileSet
+  dependsOn:
+    - OhMyPosh
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+         $line = 'oh-my-posh init pwsh | Invoke-Expression'
+ 
+          if (-not (Test-Path $PROFILE)) {
+              New-Item -Path $PROFILE -ItemType File -Force | Out-Null
+          }
+ 
+          if (-not (Select-String -Path $PROFILE -Pattern ([regex]::Escape($line)) -Quiet)) {
+              Add-Content -Path $PROFILE -Value "`n$line"
+              Write-Host "Added oh-my-posh init to $PROFILE"
+          } else {
+              Write-Host "oh-my-posh init already present in $PROFILE"
+          }
+ 
+          . $PROFILE
+      treatAsArray: true
+  metadata:
+    description: Setup OhMyPosh in PowerShell 7
