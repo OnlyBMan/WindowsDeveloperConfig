@@ -5,7 +5,7 @@
 <h1 align="center">Windows Developer Config</h1>
 
 <p align="center">
-  Opinionated <code>winget configure</code> setups for Windows dev boxes. Idempotent. CI-tested.
+  Opinionated setups for Windows dev boxes. Idempotent. CI-tested.
 </p>
 
 <p align="center">
