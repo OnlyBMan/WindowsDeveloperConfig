@@ -853,3 +853,78 @@ resources:
       treatAsArray: true
   metadata:
     description: Setup OhMyPosh in PowerShell 7
+
+# =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
+# Copilot in PS profile
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: GitHubCopilotProfile
+  dependsOn:
+    - GitHubCopilot
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+          # === Add a "GitHub Copilot" profile to Windows Terminal ===
+          $guid        = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
+          $iconUrl     = 'https://github.githubassets.com/favicons/favicon-dark.png'
+          $iconDir     = Join-Path $env:LOCALAPPDATA 'WindowsTerminal\icons'
+          $iconPath    = Join-Path $iconDir 'github-copilot.png'
+          $commandline = 'pwsh.exe -NoExit -Command "copilot"'
+          
+          # 1) Download & cache the icon locally
+          New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
+          Invoke-WebRequest -Uri $iconUrl -OutFile $iconPath -UseBasicParsing
+          
+          # 2) Locate settings.json (Store, Preview, or unpackaged install)
+          $settingsPath = @(
+              "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+              "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+              "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
+          
+          # 3) Back up before editing
+          Copy-Item $settingsPath "$settingsPath.bak" -Force
+          
+          # 4) Load JSON (strip // and /* */ comments so ConvertFrom-Json is happy)
+          $raw   = Get-Content $settingsPath -Raw
+          $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+          $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+          $settings = $clean | ConvertFrom-Json
+          
+          # 5) Build the new profile
+          $newProfile = [pscustomobject]@{
+              name              = 'GitHub Copilot'
+              guid              = $guid
+              commandline       = $commandline
+              icon              = $iconPath
+              startingDirectory = '%USERPROFILE%'
+              hidden            = $false
+              tabTitle          = 'Copilot'
+          }
+          
+          # 6) Ensure profiles.list exists, then add or replace by guid
+          if (-not $settings.profiles)      { $settings | Add-Member profiles ([pscustomobject]@{ list = @() }) -Force }
+          if (-not $settings.profiles.list) { $settings.profiles | Add-Member list @() -Force }
+          
+          $list = @($settings.profiles.list | Where-Object { $_.guid -ne $guid })
+          $list += $newProfile
+          $settings.profiles.list = $list
+          
+          # 7) Save
+          $settings | ConvertTo-Json -Depth 64 | Set-Content -Path $settingsPath -Encoding UTF8
+          
+          Write-Host "Added 'GitHub Copilot' profile to $settingsPath" -ForegroundColor Green
+          Write-Host "Icon cached at $iconPath"
+          Write-Host "Backup saved at $settingsPath.bak"
+
+      treatAsArray: true
+  metadata:
+    description: Create Github Copilot Profile
