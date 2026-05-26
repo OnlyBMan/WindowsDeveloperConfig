@@ -496,29 +496,53 @@ function Invoke-ComfortShellBootstrap {
 }
 
 function Install-NerdFont {
-    $packageId = 'DEVCOM.JetBrainsMonoNerdFont'
+    $ErrorActionPreference = 'Stop'
 
-    if (-not (Get-Command 'winget.exe' -ErrorAction SilentlyContinue)) {
-        Write-Host "  winget not available; skipping $packageId." -ForegroundColor Yellow
-        Write-Host '  Install the font manually if you want the prompt glyphs: https://www.nerdfonts.com/' -ForegroundColor DarkGray
-        return
+    $Version     = '2407.24'
+    $WantedFonts = @('CascadiaCodeNF.ttf', 'CascadiaMonoNF.ttf')
+    $zipUrl      = "https://github.com/microsoft/cascadia-code/releases/download/v$Version/CascadiaCode-$Version.zip"
+    $workDir     = Join-Path $env:TEMP "CascadiaCode-$Version"
+    $zipPath     = Join-Path $workDir 'CascadiaCode.zip'
+    New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+
+    $fontsDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+    $regPath  = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+    New-Item -ItemType Directory -Path $fontsDir -Force | Out-Null
+
+    Write-Host "Downloading $zipUrl ..."
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.Drawing
+
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        foreach ($name in $WantedFonts) {
+            $entry = $zip.Entries | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+            if (-not $entry) { Write-Warning "Not found in archive: $name"; continue }
+
+            $dest = Join-Path $fontsDir $name
+            Write-Host "Installing $name -> $dest"
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+
+            $pfc = New-Object System.Drawing.Text.PrivateFontCollection
+            try {
+                $pfc.AddFontFile($dest)
+                $family = $pfc.Families[0].Name
+            } finally { $pfc.Dispose() }
+
+            $regName = "$family (TrueType)"
+            New-ItemProperty -Path $regPath -Name $regName -Value $dest -PropertyType String -Force | Out-Null
+            Write-Host "  registered as '$regName'"
+        }
+    }
+    finally {
+        $zip.Dispose()
     }
 
-    Write-Host ''
-    Write-Host "Installing $packageId..." -ForegroundColor Cyan
-
-    & winget install `
-        --id $packageId `
-        --exact `
-        --source winget `
-        --silent `
-        --accept-source-agreements `
-        --accept-package-agreements
-
-    $code = $LASTEXITCODE
-    if ($code -ne 0) {
-        Write-Host "  winget exited with code 0x$('{0:X8}' -f $code) (often 'already installed'). Continuing." -ForegroundColor DarkGray
-    }
+    Remove-Item $zipPath -Force
+    Write-Host "`nDone. Restart any running apps (terminal, editors) to pick up the new fonts."
 }
 
 function Install-TerminalProfile {
