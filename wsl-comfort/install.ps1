@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Apply the Comfort Shell setup and run the WSL bootstrap.
 .DESCRIPTION
