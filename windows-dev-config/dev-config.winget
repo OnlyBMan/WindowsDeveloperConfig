@@ -543,7 +543,7 @@ resources:
 # =============================================================================
 # Registry — HKLM keys (elevated, native v3 Microsoft.Windows/Registry)
 #
-# Microsoft Edge policies — https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies#newtabpage
+# Microsoft Edge policies — https://learn.microsoft.com/deployedge/microsoft-edge-policies#newtabpage
 # =============================================================================
 
 - type: Microsoft.Windows/Registry

@@ -54,7 +54,7 @@ list (paths, build/run commands, onboarding URLs).
 
 ## Command Palette extension
 
-A [PowerToys Command Palette](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/overview)
+A [PowerToys Command Palette](https://learn.microsoft.com/windows/powertoys/command-palette/overview)
 extension lives under [`future/cmdpal/`](../future/cmdpal/). It reads the same
 `manifest.yml` as CI and lets you browse + launch any flow without remembering
 which `configuration.winget` to point `winget` at.

@@ -106,7 +106,7 @@ flows:
     category: desktop
     tags: [dotnet, csharp, winforms, windows, desktop]
     icon: 🪟
-    onboardingUrl: https://learn.microsoft.com/en-us/dotnet/desktop/winforms/overview/
+    onboardingUrl: https://learn.microsoft.com/dotnet/desktop/winforms/overview/
     # Excluded from the automated matrix because the install pulls the .NET
     # desktop workload (effectively the Visual Studio build tools), which is
     # multi-GB and dominates the CI minute budget. Verified working locally
@@ -127,7 +127,7 @@ flows:
     category: desktop
     tags: [dotnet, csharp, winui, windows, desktop, windowsappsdk]
     icon: 🪟
-    onboardingUrl: https://learn.microsoft.com/en-us/windows/apps/winui/winui3/
+    onboardingUrl: https://learn.microsoft.com/windows/apps/winui/winui3/
     # WinUI hello world needs an interactive desktop session to actually run;
     # CI only validates that the configuration applies cleanly. The build/run
     # fields stay populated so a human can execute the flow locally.
@@ -147,7 +147,7 @@ flows:
     category: languages
     tags: [dotnet, csharp, fsharp, net]
     icon: 🟣
-    onboardingUrl: https://learn.microsoft.com/en-us/dotnet/core/install/windows
+    onboardingUrl: https://learn.microsoft.com/dotnet/core/install/windows
     os: [windows]
     windows:
       install: Workloads/dotnet/install.ps1
@@ -179,7 +179,7 @@ flows:
     category: languages
     tags: [java, jdk, openjdk, jvm]
     icon: ☕
-    onboardingUrl: https://learn.microsoft.com/en-us/java/openjdk/install
+    onboardingUrl: https://learn.microsoft.com/java/openjdk/install
     os: [windows]
     windows:
       install: Workloads/java/install.ps1

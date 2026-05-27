@@ -1,6 +1,6 @@
 # QuickWingetSetup — Command Palette extension
 
-A [PowerToys Command Palette](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/overview)
+A [PowerToys Command Palette](https://learn.microsoft.com/windows/powertoys/command-palette/overview)
 extension that surfaces the developer flows defined in this repo's
 [`manifest.yml`](../../manifest.yml). Pick a flow, hit Enter, and the extension
 launches `winget configure` (Windows) or `wsl bash` (Linux) in a new Windows
