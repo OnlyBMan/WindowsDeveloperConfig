@@ -46,7 +46,6 @@ if ($ResumeEncodedArgs) {
 }
 
 $script:CurrentStep = 0
-$script:TotalSteps  = 5
 
 function Set-ConsoleTitle {
     param([string]$Title)
@@ -92,8 +91,9 @@ function Read-YesNo {
     }
 }
 
-function Get-WslSupportedDistros {
-    # Installed Ubuntu distros on this machine. `wsl -l -q` emits UTF-16LE with NUL bytes.
+function Get-InstalledWslDistros {
+    # Returns the names of Ubuntu distros currently installed in WSL.
+    # `wsl -l -q` emits UTF-16LE with NUL bytes; strip them before filtering.
     $raw = (& wsl.exe --list --quiet) 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $raw) { return @() }
     return @($raw |
@@ -330,7 +330,7 @@ function Install-NewDistro {
         $exitCode = Invoke-NativeConsole -FilePath 'wsl.exe' -ArgumentList @('--install', '-d', $Name, '--no-launch')
         Write-Host ''
 
-        if ((@(Get-WslSupportedDistros)) -contains $Name) { return $Name }
+        if ((@(Get-InstalledWslDistros)) -contains $Name) { return $Name }
 
         if ($attempt -lt $maxAttempts) {
             $delay = if ($attempt -eq 1) { 5 } else { 15 }
@@ -400,7 +400,7 @@ function Select-ExistingOrInstallDistro {
 }
 
 function Resolve-Distro {
-    $existing = @(Get-WslSupportedDistros)
+    $existing = @(Get-InstalledWslDistros)
 
     if ($Distro) {
         if (-not ($Distro -like 'Ubuntu*')) {
@@ -496,29 +496,73 @@ function Invoke-ComfortShellBootstrap {
 }
 
 function Install-NerdFont {
-    $packageId = 'DEVCOM.JetBrainsMonoNerdFont'
+    $ErrorActionPreference = 'Stop'
 
-    if (-not (Get-Command 'winget.exe' -ErrorAction SilentlyContinue)) {
-        Write-Host "  winget not available; skipping $packageId." -ForegroundColor Yellow
-        Write-Host '  Install the font manually if you want the prompt glyphs: https://www.nerdfonts.com/' -ForegroundColor DarkGray
+    $Version     = '2407.24'
+    $WantedFonts = @('CascadiaCodeNF.ttf', 'CascadiaMonoNF.ttf')
+
+    # Skip if all font files and registry entries are already present
+    $fontsDir  = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+    $regPath   = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+    $regValues = @(
+        (Get-ItemProperty $regPath -EA SilentlyContinue).PSObject.Properties |
+        Where-Object Name -notin 'PSPath','PSParentPath','PSChildName','PSDrive','PSProvider' |
+        Select-Object -ExpandProperty Value
+    )
+    $filesOk = -not ($WantedFonts | Where-Object { -not (Test-Path (Join-Path $fontsDir $_)) })
+    $regOk   = -not ($WantedFonts | Where-Object { $fn = $_; -not ($regValues | Where-Object { $_ -like "*\$fn" }) })
+    if ($filesOk -and $regOk) {
+        Write-Host "Nerd fonts already installed; skipping."
         return
     }
 
-    Write-Host ''
-    Write-Host "Installing $packageId..." -ForegroundColor Cyan
+    $zipUrl  = "https://github.com/microsoft/cascadia-code/releases/download/v$Version/CascadiaCode-$Version.zip"
+    $workDir = Join-Path $env:TEMP "CascadiaCode-$Version"
+    $zipPath = Join-Path $workDir 'CascadiaCode.zip'
+    New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $fontsDir -Force | Out-Null
 
-    & winget install `
-        --id $packageId `
-        --exact `
-        --source winget `
-        --silent `
-        --accept-source-agreements `
-        --accept-package-agreements
+    Write-Host "Downloading $zipUrl ..."
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
 
-    $code = $LASTEXITCODE
-    if ($code -ne 0) {
-        Write-Host "  winget exited with code 0x$('{0:X8}' -f $code) (often 'already installed'). Continuing." -ForegroundColor DarkGray
+    $expectedHash = 'E67A68EE3386DB63F48B9054BD196EA752BC6A4EBB4DF35ADCE6733DA50C8474'
+    $actualHash   = (Get-FileHash $zipPath -Algorithm SHA256).Hash
+    if ($actualHash -ne $expectedHash) {
+        Remove-Item $zipPath -Force
+        throw "Hash mismatch for CascadiaCode-$Version.zip: expected $expectedHash, got $actualHash"
     }
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.Drawing
+
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        foreach ($name in $WantedFonts) {
+            $entry = $zip.Entries | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+            if (-not $entry) { Write-Warning "Not found in archive: $name"; continue }
+
+            $dest = Join-Path $fontsDir $name
+            Write-Host "Installing $name -> $dest"
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+
+            $pfc = New-Object System.Drawing.Text.PrivateFontCollection
+            try {
+                $pfc.AddFontFile($dest)
+                $family = $pfc.Families[0].Name
+            } finally { $pfc.Dispose() }
+
+            $regName = "$family (TrueType)"
+            New-ItemProperty -Path $regPath -Name $regName -Value $dest -PropertyType String -Force | Out-Null
+            Write-Host "  registered as '$regName'"
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+
+    Remove-Item $zipPath -Force
+    Write-Host "`nDone. Restart any running apps (terminal, editors) to pick up the new fonts."
 }
 
 function Install-TerminalProfile {
@@ -555,7 +599,7 @@ function Install-TerminalProfile {
                 cursorShape     = 'bar'
                 hidden          = $false
                 font            = @{
-                    face = 'JetBrainsMono Nerd Font'
+                    face = 'Cascadia Mono NF'
                     size = 13
                 }
             }
@@ -622,6 +666,8 @@ function Install-TerminalProfile {
 }
 
 # --- Main flow ---------------------------------------------------------------
+# Steps: WSL platform + distro + bootstrap + nerd fonts + WT profile
+$script:TotalSteps = 5
 
 Assert-WindowsTerminal
 Clear-ResumeAfterReboot
@@ -642,7 +688,7 @@ $preBootstrapUser = Get-WslDefaultUser -DistroName $Distro
 Step "Running Comfort Shell bootstrap in $Distro"
 Invoke-ComfortShellBootstrap -DistroName $Distro
 
-Step "Installing JetBrainsMono Nerd Font"
+Step "Installing Cascadia Code Nerd Fonts"
 Install-NerdFont
 
 Step "Installing Windows Terminal profile"

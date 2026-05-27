@@ -9,7 +9,7 @@ metadata:
 resources:
 
 # ---------------------------------------------------------------------------
-# WSL Phase 0 — Elevation check (runs on initial invoke AND post-reboot resume)
+# Phase 0 — Elevation check (runs on initial invoke AND post-reboot resume)
 # ---------------------------------------------------------------------------
 
 - name: ElevationCheck
@@ -60,173 +60,233 @@ resources:
     description: Install PowerShell 7
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Force darktheme
+# Force dark theme
+# Uses app and system theme registry values to detect dark theme.
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
+- type: Microsoft.DSC.Transitional/PowerShellScript
   name: darkTheme
   dependsOn:
     - PowerShell
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-        Start-Process -FilePath "C:\Windows\Resources\Themes\dark.theme"
- 
-        # Settings will pop open to show the theme applied; close it after a moment:
-        Start-Sleep -Seconds 2
-        Stop-Process -Name SystemSettings -Force -ErrorAction SilentlyContinue
-      treatAsArray: true
+    getScript: |
+      $regPath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+      $apps   = Get-ItemPropertyValue $regPath -Name AppsUseLightTheme    -EA SilentlyContinue
+      $system = Get-ItemPropertyValue $regPath -Name SystemUsesLightTheme -EA SilentlyContinue
+      return @{ AppsUseLightTheme = [int]$apps; SystemUsesLightTheme = [int]$system }
+    testScript: |
+      $regPath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+      $apps   = Get-ItemPropertyValue $regPath -Name AppsUseLightTheme    -EA SilentlyContinue
+      $system = Get-ItemPropertyValue $regPath -Name SystemUsesLightTheme -EA SilentlyContinue
+      return ($apps -eq 0 -and $system -eq 0)
+    setScript: |
+      # Apply the .theme file to update shell chrome, wallpaper, and sound scheme
+      Start-Process -FilePath "C:\Windows\Resources\Themes\dark.theme"
+      Start-Sleep -Seconds 2
+      Stop-Process -Name SystemSettings -Force -ErrorAction SilentlyContinue
   metadata:
     description: Sets dark theme
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Include Oh My Posh in PS profile
+# Install Cascadia Code Nerd Fonts
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
-  name: InstallCascadiaCodeNerdFonts 
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: InstallCascadiaCodeNerdFonts
   dependsOn:
     - PowerShell
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-          $ErrorActionPreference = 'Stop'
- 
-          $Version = '2407.24'
-          $WantedFonts = @(
-              'CascadiaCodeNF.ttf',
-              'CascadiaMonoNF.ttf'
-          )
+    getScript: |
+      $fontsDir    = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+      $wantedFonts = @('CascadiaCodeNF.ttf', 'CascadiaMonoNF.ttf')
+      $regPath     = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+      $regValues   = @(
+          (Get-ItemProperty $regPath -EA SilentlyContinue).PSObject.Properties |
+          Where-Object Name -notin 'PSPath','PSParentPath','PSChildName','PSDrive','PSProvider' |
+          Select-Object -ExpandProperty Value
+      )
+      $filesOk = -not ($wantedFonts | Where-Object { -not (Test-Path (Join-Path $fontsDir $_)) })
+      $regOk   = -not ($wantedFonts | Where-Object { $fn = $_; -not ($regValues | Where-Object { $_ -like "*\$fn" }) })
+      return @{ filesInstalled = $filesOk; registryEntries = $regOk }
+    testScript: |
+      $fontsDir    = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+      $wantedFonts = @('CascadiaCodeNF.ttf', 'CascadiaMonoNF.ttf')
+      $regPath     = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+      $regValues   = @(
+          (Get-ItemProperty $regPath -EA SilentlyContinue).PSObject.Properties |
+          Where-Object Name -notin 'PSPath','PSParentPath','PSChildName','PSDrive','PSProvider' |
+          Select-Object -ExpandProperty Value
+      )
+      $filesOk = -not ($wantedFonts | Where-Object { -not (Test-Path (Join-Path $fontsDir $_)) })
+      $regOk   = -not ($wantedFonts | Where-Object { $fn = $_; -not ($regValues | Where-Object { $_ -like "*\$fn" }) })
+      return ($filesOk -and $regOk)
+    setScript: |
+      $ErrorActionPreference = 'Stop'
 
-          $zipUrl  = "https://github.com/microsoft/cascadia-code/releases/download/v$Version/CascadiaCode-$Version.zip"
-          $workDir = Join-Path $env:TEMP "CascadiaCode-$Version"
-          $zipPath = Join-Path $workDir 'CascadiaCode.zip'
-          New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+      $Version     = '2407.24'
+      $WantedFonts = @('CascadiaCodeNF.ttf', 'CascadiaMonoNF.ttf')
+      $zipUrl      = "https://github.com/microsoft/cascadia-code/releases/download/v$Version/CascadiaCode-$Version.zip"
+      $workDir     = Join-Path $env:TEMP "CascadiaCode-$Version"
+      $zipPath     = Join-Path $workDir 'CascadiaCode.zip'
+      New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 
-          $fontsDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
-          $regPath  = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
-          New-Item -ItemType Directory -Path $fontsDir -Force | Out-Null
+      $fontsDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+      $regPath  = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+      New-Item -ItemType Directory -Path $fontsDir -Force | Out-Null
 
-          Write-Host "Downloading $zipUrl ..."
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+      Write-Host "Downloading $zipUrl ..."
+      $ProgressPreference = 'SilentlyContinue'
+      Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
 
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          Add-Type -AssemblyName System.Drawing
-
-          $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
-          try {
-              foreach ($name in $WantedFonts) {
-                  $entry = $zip.Entries | Where-Object { $_.Name -eq $name } | Select-Object -First 1
-                  if (-not $entry) { Write-Warning "Not found in archive: $name"; continue }
-
-                  $dest = Join-Path $fontsDir $name
-                  Write-Host "Installing $name -> $dest"
-                  [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
-
-                  $pfc = New-Object System.Drawing.Text.PrivateFontCollection
-                  try {
-                      $pfc.AddFontFile($dest)
-                      $family = $pfc.Families[0].Name
-                  } finally { $pfc.Dispose() }
-
-                  $regName = "$family (TrueType)"
-                  New-ItemProperty -Path $regPath -Name $regName -Value $dest -PropertyType String -Force | Out-Null
-                  Write-Host "  registered as '$regName'"
-              }
-          }
-          finally {
-              $zip.Dispose()
-          }
-
+      $expectedHash = 'E67A68EE3386DB63F48B9054BD196EA752BC6A4EBB4DF35ADCE6733DA50C8474'
+      $actualHash   = (Get-FileHash $zipPath -Algorithm SHA256).Hash
+      if ($actualHash -ne $expectedHash) {
           Remove-Item $zipPath -Force
-          Write-Host "`nDone. Restart any running apps (terminal, editors) to pick up the new fonts."
-      treatAsArray: true
+          throw "Hash mismatch for CascadiaCode-$Version.zip: expected $expectedHash, got $actualHash"
+      }
+
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
+      Add-Type -AssemblyName System.Drawing
+
+      $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+      try {
+          foreach ($name in $WantedFonts) {
+              $entry = $zip.Entries | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+              if (-not $entry) { Write-Warning "Not found in archive: $name"; continue }
+
+              $dest = Join-Path $fontsDir $name
+              Write-Host "Installing $name -> $dest"
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+
+              $pfc = New-Object System.Drawing.Text.PrivateFontCollection
+              try {
+                  $pfc.AddFontFile($dest)
+                  $family = $pfc.Families[0].Name
+              } finally { $pfc.Dispose() }
+
+              $regName = "$family (TrueType)"
+              New-ItemProperty -Path $regPath -Name $regName -Value $dest -PropertyType String -Force | Out-Null
+              Write-Host "  registered as '$regName'"
+          }
+      }
+      finally {
+          $zip.Dispose()
+      }
+
+      Remove-Item $zipPath -Force
+      Write-Host "`nDone. Restart any running apps (terminal, editors) to pick up the new fonts."
   metadata:
     description: Install Cascadia Code Nerd Fonts
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Include Oh My Posh in PS profile
+# Set Cascadia Mono NF as default Windows Terminal font
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
+- type: Microsoft.DSC.Transitional/PowerShellScript
   name: SetCascadiaNfAsDefault
   dependsOn:
     - InstallCascadiaCodeNerdFonts
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-          $fontFace = 'Cascadia Mono NF'
+    getScript: |
+      $settingsPath = @(
+          Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -EA SilentlyContinue |
+              ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return @{ fontFace = $null } }
+      $raw   = Get-Content $settingsPath -Raw
+      $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $json  = $clean | ConvertFrom-Json
+      return @{ fontFace = $json.profiles.defaults.font.face }
+    testScript: |
+      $fontFace     = 'Cascadia Mono NF'
+      $settingsPath = @(
+          Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -EA SilentlyContinue |
+              ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return $true }
+      $raw   = Get-Content $settingsPath -Raw
+      $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $json  = $clean | ConvertFrom-Json
+      return ($json.profiles.defaults.font.face -eq $fontFace)
+    setScript: |
+      $fontFace     = 'Cascadia Mono NF'
+      $settingsPath = @(
+          Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -EA SilentlyContinue |
+              ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
+      Write-Host "Using: $settingsPath"
 
-          $settingsPath =
-              @(Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -ErrorAction SilentlyContinue |
-                  ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }) +
-              "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json" |
-              Where-Object { Test-Path $_ } |
-              Select-Object -First 1
+      Copy-Item $settingsPath "$settingsPath.bak" -Force
 
-          if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
-          Write-Host "Using: $settingsPath"
+      $raw   = Get-Content $settingsPath -Raw
+      $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $json  = $clean | ConvertFrom-Json -AsHashtable
 
-          Copy-Item $settingsPath "$settingsPath.bak" -Force
+      if (-not $json.profiles)               { $json.profiles = [ordered]@{} }
+      if (-not $json.profiles.defaults)      { $json.profiles.defaults = [ordered]@{} }
+      if (-not $json.profiles.defaults.font) { $json.profiles.defaults.font = [ordered]@{} }
+      $json.profiles.defaults.font.face = $fontFace
 
-          $json = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
-
-          if (-not $json.profiles)               { $json.profiles = [ordered]@{} }
-          if (-not $json.profiles.defaults)      { $json.profiles.defaults = [ordered]@{} }
-          if (-not $json.profiles.defaults.font) { $json.profiles.defaults.font = [ordered]@{} }
-          $json.profiles.defaults.font.face = $fontFace
-
-          $json | ConvertTo-Json -Depth 32 | Set-Content $settingsPath -Encoding utf8
-          Write-Host "Set font to '$fontFace'  (backup: $settingsPath.bak)"
-      treatAsArray: true
+      $json | ConvertTo-Json -Depth 32 | Set-Content $settingsPath -Encoding utf8
+      Write-Host "Set font to '$fontFace'  (backup: $settingsPath.bak)"
   metadata:
-    description: Making Cascaida fonts default
+    description: Making Cascadia fonts default
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Windows Terminal Default Profile 
+# Set PowerShell 7 as the default Windows Terminal profile
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
+- type: Microsoft.DSC.Transitional/PowerShellScript
   name: ps7default
   dependsOn:
     - PowerShell
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-        $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-        if (!(Test-Path $settingsPath)) { return }
-        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-        $ps7Profile = $settings.profiles.list | Where-Object { $_.name -eq "PowerShell" -or ($_ | Get-Member -Name source -ErrorAction SilentlyContinue) -and $_.source -eq "Windows.Terminal.PowershellCore" } | Select-Object -First 1
-        if ($ps7Profile -and $settings.defaultProfile -ne $ps7Profile.guid) {
-          $settings.defaultProfile = $ps7Profile.guid
-          $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
-        }
-      treatAsArray: true
+    getScript: |
+      $settingsPath = @(
+          Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -EA SilentlyContinue |
+              ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return @{ defaultProfile = $null; ps7ProfileGuid = $null } }
+      $raw      = Get-Content $settingsPath -Raw
+      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $settings = $clean | ConvertFrom-Json
+      $ps7      = $settings.profiles.list | Where-Object { $_.source -eq 'Windows.Terminal.PowershellCore' -or $_.name -eq 'PowerShell' } | Select-Object -First 1
+      return @{ defaultProfile = $settings.defaultProfile; ps7ProfileGuid = $ps7.guid }
+    testScript: |
+      $settingsPath = @(
+          Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -EA SilentlyContinue |
+              ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return $true }
+      $raw      = Get-Content $settingsPath -Raw
+      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $settings = $clean | ConvertFrom-Json
+      $ps7      = $settings.profiles.list | Where-Object { $_.source -eq 'Windows.Terminal.PowershellCore' -or $_.name -eq 'PowerShell' } | Select-Object -First 1
+      if (-not $ps7) { return $true }
+      return ($settings.defaultProfile -eq $ps7.guid)
+    setScript: |
+      $settingsPath = @(
+          Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter 'Microsoft.WindowsTerminal*' -Directory -EA SilentlyContinue |
+              ForEach-Object { Join-Path $_.FullName 'LocalState\settings.json' }
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return }
+      $raw      = Get-Content $settingsPath -Raw
+      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $settings = $clean | ConvertFrom-Json
+      $ps7      = $settings.profiles.list | Where-Object { $_.source -eq 'Windows.Terminal.PowershellCore' -or $_.name -eq 'PowerShell' } | Select-Object -First 1
+      if ($ps7 -and $settings.defaultProfile -ne $ps7.guid) {
+        $settings.defaultProfile = $ps7.guid
+        $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
+      }
   metadata:
     description: Set PowerShell 7 as the default Windows Terminal profile
 
@@ -248,7 +308,6 @@ resources:
     valueName: Enabled
     valueData:
       DWord: 3
-    _exist: true
   metadata:
     description: Enable Sudo in inline mode
 
@@ -304,7 +363,6 @@ resources:
 #    valueName: HideIcons
 #    valueData:
 #      DWord: 1
-#    _exist: true
 #  metadata:
 #    description: Hide desktop icons
 
@@ -345,7 +403,6 @@ resources:
     valueName: FullPathAddress
     valueData:
       DWord: 1
-    _exist: true
   metadata:
     description: Show full path in Explorer titlebar
 
@@ -358,7 +415,6 @@ resources:
     valueName: LaunchTo
     valueData:
       DWord: 1
-    _exist: true
   metadata:
     description: Open File Explorer to This PC
 
@@ -371,7 +427,6 @@ resources:
     valueName: ShowFrequent
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable frequent folders in Quick Access
 
@@ -384,7 +439,6 @@ resources:
     valueName: ShowRecent
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable frequent files in Quick Access
 
@@ -397,7 +451,6 @@ resources:
     valueName: ShowCloudFilesInQuickAccess
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable recommended/cloud files in Quick Access
 
@@ -410,7 +463,6 @@ resources:
     valueName: NavPaneShowVersionControl
     valueData:
       DWord: 1
-    _exist: true
   metadata:
     description: Enable Git integration in File Explorer
 
@@ -423,7 +475,6 @@ resources:
     valueName: ShowSyncProviderNotifications
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable sync provider notifications (tips)
 
@@ -492,7 +543,6 @@ resources:
     valueName: DisableSearchBoxSuggestions
     valueData:
       DWord: 1
-    _exist: true
   metadata:
     description: Disable web search in Start/Search
 
@@ -505,7 +555,6 @@ resources:
     valueName: IsDynamicSearchBoxEnabled
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable Show search highlights
 
@@ -518,7 +567,6 @@ resources:
     valueName: Start_Layout
     valueData:
       DWord: 1
-    _exist: true
   metadata:
     description: Disable Start menu recommendations
 
@@ -535,7 +583,6 @@ resources:
     valueName: AllowNewsAndInterests
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable Widget service
 
@@ -555,7 +602,6 @@ resources:
     valueName: NewTabPageLocation
     valueData:
       String: about:blank
-    _exist: true
   metadata:
     description: Set Edge new tab to blank
 
@@ -568,7 +614,6 @@ resources:
     valueName: HideFirstRunExperience
     valueData:
       DWord: 1
-    _exist: true
   metadata:
     description: Disable Edge first-run experience
 
@@ -815,141 +860,158 @@ resources:
     valueName: Enabled
     valueData:
       DWord: 0
-    _exist: true
   metadata:
     description: Disable PowerToys AOT notifications
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Include Oh My Posh in PS profile
+# Include Oh My Posh init in PowerShell 7 profile
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
+- type: OhMyPosh/Shell
   name: ohMyPoshProfileSet
   dependsOn:
     - OhMyPosh
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-         $line = 'oh-my-posh init pwsh | Invoke-Expression'
- 
-          if (-not (Test-Path $PROFILE)) {
-              New-Item -Path $PROFILE -ItemType File -Force | Out-Null
-          }
- 
-          if (-not (Select-String -Path $PROFILE -Pattern ([regex]::Escape($line)) -Quiet)) {
-              Add-Content -Path $PROFILE -Value "`n$line"
-              Write-Host "Added oh-my-posh init to $PROFILE"
-          } else {
-              Write-Host "oh-my-posh init already present in $PROFILE"
-          }
- 
-          . $PROFILE
-      treatAsArray: true
+    states:
+      - name: pwsh
+        command: oh-my-posh init pwsh
   metadata:
     description: Setup OhMyPosh in PowerShell 7
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Copilot in PS profile
+# Add GitHub Copilot profile to Windows Terminal
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
+- type: Microsoft.DSC.Transitional/PowerShellScript
   name: GitHubCopilotProfile
   dependsOn:
     - GitHubCopilot
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-          # === Add a "GitHub Copilot" profile to Windows Terminal ===
-          $guid        = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
-          $iconUrl     = 'https://github.githubassets.com/favicons/favicon-dark.png'
-          $iconDir     = Join-Path $env:LOCALAPPDATA 'WindowsTerminal\icons'
-          $iconPath    = Join-Path $iconDir 'github-copilot.png'
-          $commandline = 'pwsh.exe -NoExit -Command "copilot"'
-          
-          # 1) Download & cache the icon locally
-          New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
-          Invoke-WebRequest -Uri $iconUrl -OutFile $iconPath -UseBasicParsing
-          
-          # 2) Locate settings.json (Store, Preview, or unpackaged install)
-          $settingsPath = @(
-              "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
-              "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
-              "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
-          
-          # 3) Back up before editing
-          Copy-Item $settingsPath "$settingsPath.bak" -Force
-          
-          # 4) Load JSON (strip // and /* */ comments so ConvertFrom-Json is happy)
-          $raw   = Get-Content $settingsPath -Raw
-          $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
-          $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
-          $settings = $clean | ConvertFrom-Json
-          
-          # 5) Build the new profile
-          $newProfile = [pscustomobject]@{
-              name              = 'GitHub Copilot'
-              guid              = $guid
-              commandline       = $commandline
-              icon              = $iconPath
-              startingDirectory = '%USERPROFILE%'
-              hidden            = $false
-              tabTitle          = 'Copilot'
-          }
-          
-          # 6) Ensure profiles.list exists, then add or replace by guid
-          if (-not $settings.profiles)      { $settings | Add-Member profiles ([pscustomobject]@{ list = @() }) -Force }
-          if (-not $settings.profiles.list) { $settings.profiles | Add-Member list @() -Force }
-          
-          $list = @($settings.profiles.list | Where-Object { $_.guid -ne $guid })
-          $list += $newProfile
-          $settings.profiles.list = $list
-          
-          # 7) Save
-          $settings | ConvertTo-Json -Depth 64 | Set-Content -Path $settingsPath -Encoding UTF8
-          
-          Write-Host "Added 'GitHub Copilot' profile to $settingsPath" -ForegroundColor Green
-          Write-Host "Icon cached at $iconPath"
-          Write-Host "Backup saved at $settingsPath.bak"
+    getScript: |
+      $guid         = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
+      $settingsPath = @(
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return @{ profilePresent = $false } }
+      $raw      = Get-Content $settingsPath -Raw
+      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $settings = $clean | ConvertFrom-Json
+      $exists   = [bool]($settings.profiles.list | Where-Object { $_.guid -eq $guid })
+      return @{ profilePresent = $exists }
+    testScript: |
+      $guid         = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
+      $settingsPath = @(
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { return $true }
+      $raw      = Get-Content $settingsPath -Raw
+      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $settings = $clean | ConvertFrom-Json
+      return [bool]($settings.profiles.list | Where-Object { $_.guid -eq $guid })
+    setScript: |
+      $guid        = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
+      $iconUrl     = 'https://github.githubassets.com/favicons/favicon-dark.png'
+      $iconDir     = Join-Path $env:LOCALAPPDATA 'WindowsTerminal\icons'
+      $iconPath    = Join-Path $iconDir 'github-copilot.png'
+      $commandline = 'pwsh.exe -NoExit -Command "copilot"'
 
-      treatAsArray: true
+      # 1) Download & cache the icon locally
+      New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
+      Invoke-WebRequest -Uri $iconUrl -OutFile $iconPath -UseBasicParsing
+
+      # 2) Locate settings.json (Store, Preview, or unpackaged install)
+      $settingsPath = @(
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
+
+      # 3) Back up before editing
+      Copy-Item $settingsPath "$settingsPath.bak" -Force
+
+      # 4) Load JSON (strip // and /* */ comments so ConvertFrom-Json is happy)
+      $raw   = Get-Content $settingsPath -Raw
+      $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
+      $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
+      $settings = $clean | ConvertFrom-Json
+
+      # 5) Build the new profile
+      $newProfile = [pscustomobject]@{
+          name              = 'GitHub Copilot'
+          guid              = $guid
+          commandline       = $commandline
+          icon              = $iconPath
+          startingDirectory = '%USERPROFILE%'
+          hidden            = $false
+          tabTitle          = 'Copilot'
+      }
+
+      # 6) Ensure profiles.list exists, then add or replace by guid
+      if (-not $settings.profiles)      { $settings | Add-Member profiles ([pscustomobject]@{ list = @() }) -Force }
+      if (-not $settings.profiles.list) { $settings.profiles | Add-Member list @() -Force }
+
+      $list = @($settings.profiles.list | Where-Object { $_.guid -ne $guid })
+      $list += $newProfile
+      $settings.profiles.list = $list
+
+      # 7) Save
+      $settings | ConvertTo-Json -Depth 64 | Set-Content -Path $settingsPath -Encoding UTF8
+
+      Write-Host "Added 'GitHub Copilot' profile to $settingsPath" -ForegroundColor Green
+      Write-Host "Icon cached at $iconPath"
+      Write-Host "Backup saved at $settingsPath.bak"
   metadata:
     description: Create Github Copilot Profile
 
 # =============================================================================
-# Script-Based Items (RunCommandOnSet)
-# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
-#
-# Copilot in PS profile
+# Install Win Skills
 # =============================================================================
-- type: Microsoft.DSC.Transitional/RunCommandOnSet
-  name: WinSkills
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: InstallWinUITemplates
   dependsOn:
-    - GitHubCopilot
     - DotnetSdk
   properties:
-    executable: pwsh.exe
-    arguments:
-      "0": -NoProfile
-      "1": -NoLogo
-      "2": -Command
-      "3": |
-         dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
-         copilot plugin marketplace add microsoft/win-dev-skills
-         copilot plugin install winui@win-dev-skills
-      treatAsArray: true
+    getScript: |
+      $installed = [bool](dotnet new list 2>&1 | Select-String -Pattern 'winui' -CaseSensitive:$false)
+      return @{ installed = $installed }
+    testScript: |
+      return [bool](dotnet new list 2>&1 | Select-String -Pattern 'winui' -CaseSensitive:$false)
+    setScript: |
+      dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
   metadata:
-    description: Install Win Skills
+    description: Install WinUI dotnet new templates
+
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: AddWinSkillsMarketplace
+  dependsOn:
+    - GitHubCopilot
+  properties:
+    getScript: |
+      $present = [bool](copilot plugin marketplace list 2>&1 | Select-String 'win-dev-skills')
+      return @{ present = $present }
+    testScript: |
+      return [bool](copilot plugin marketplace list 2>&1 | Select-String 'win-dev-skills')
+    setScript: |
+      copilot plugin marketplace add microsoft/win-dev-skills
+  metadata:
+    description: Add win-dev-skills to the Copilot plugin marketplace
+
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: InstallWinUIPlugin
+  dependsOn:
+    - AddWinSkillsMarketplace
+  properties:
+    getScript: |
+      $installed = [bool](copilot plugin list 2>&1 | Select-String 'winui')
+      return @{ installed = $installed }
+    testScript: |
+      return [bool](copilot plugin list 2>&1 | Select-String 'winui')
+    setScript: |
+      copilot plugin install winui@win-dev-skills
+  metadata:
+    description: Install the WinUI Copilot plugin from win-dev-skills
