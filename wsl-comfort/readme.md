@@ -1,4 +1,4 @@
-# Comfort Shell 😎
+# WSL Comfort Shell 😎
 
 A two-part installer that turns a fresh Windows + WSL machine into a cozy, opinionated-but-configurable shell: an Ubuntu distro running zsh + starship + modern CLI tools, surfaced through a themed Windows Terminal profile in a Cascadia Code Nerd Font. Every component is opt-in — pick the parts you want and skip the rest.
 
