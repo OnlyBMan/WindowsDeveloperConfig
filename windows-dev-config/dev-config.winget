@@ -928,3 +928,28 @@ resources:
       treatAsArray: true
   metadata:
     description: Create Github Copilot Profile
+
+# =============================================================================
+# Script-Based Items (RunCommandOnSet)
+# PowerShell :: Microsoft.DSC.Transitional/PowerShellScript should be what we use 
+#
+# Copilot in PS profile
+# =============================================================================
+- type: Microsoft.DSC.Transitional/RunCommandOnSet
+  name: WinSkills
+  dependsOn:
+    - GitHubCopilot
+    - DotnetSdk
+  properties:
+    executable: pwsh.exe
+    arguments:
+      "0": -NoProfile
+      "1": -NoLogo
+      "2": -Command
+      "3": |
+         dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+         copilot plugin marketplace add microsoft/win-dev-skills
+         copilot plugin install winui@win-dev-skills
+      treatAsArray: true
+  metadata:
+    description: Install Win Skills
