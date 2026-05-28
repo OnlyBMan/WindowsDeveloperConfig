@@ -77,7 +77,7 @@ jobs:
                       )
                   out.append({
                       "id":       flow["id"],
-                      "install":  spec["install"],
+                      "install":  "src/" + spec["install"],
                       "build":    spec.get("build", "") or "",
                       "run":      spec["run"],
                       "expected": spec["expected"],
