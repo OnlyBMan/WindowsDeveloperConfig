@@ -178,6 +178,9 @@ resources:
 
 # =============================================================================
 # Set Cascadia Mono NF as default Windows Terminal font
+# NOTE: This cannot use a fragment. Fragments support adding profiles and color
+# schemes, but not profiles.defaults (which applies settings across all profiles).
+# Direct settings.json modification is the only available approach here.
 # =============================================================================
 - type: Microsoft.DSC.Transitional/PowerShellScript
   name: SetCascadiaNfAsDefault
@@ -238,6 +241,9 @@ resources:
 
 # =============================================================================
 # Set PowerShell 7 as the default Windows Terminal profile
+# NOTE: This cannot use a fragment. Fragments support adding profiles and color
+# schemes, but not the top-level defaultProfile setting in settings.json.
+# Direct settings.json modification is the only available approach here.
 # =============================================================================
 - type: Microsoft.DSC.Transitional/PowerShellScript
   name: ps7default
@@ -879,6 +885,8 @@ resources:
 
 # =============================================================================
 # Add GitHub Copilot profile to Windows Terminal
+# Uses a fragment file so settings.json is never touched directly.
+# Fragment file: %LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\DevConfig\github-copilot.fragment.json
 # =============================================================================
 - type: Microsoft.DSC.Transitional/PowerShellScript
   name: GitHubCopilotProfile
@@ -886,85 +894,47 @@ resources:
     - GitHubCopilot
   properties:
     getScript: |
-      $guid         = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
-      $settingsPath = @(
-          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
-          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
-          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
-      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-      if (-not $settingsPath) { return @{ profilePresent = $false } }
-      $raw      = Get-Content $settingsPath -Raw
-      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
-      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
-      $settings = $clean | ConvertFrom-Json
-      $exists   = [bool]($settings.profiles.list | Where-Object { $_.guid -eq $guid })
-      return @{ profilePresent = $exists }
+      $fragmentPath = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\DevConfig\github-copilot.fragment.json'
+      return @{ fragmentPresent = (Test-Path $fragmentPath) }
     testScript: |
-      $guid         = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
-      $settingsPath = @(
-          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
-          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
-          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
-      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-      if (-not $settingsPath) { return $true }
-      $raw      = Get-Content $settingsPath -Raw
-      $clean    = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
-      $clean    = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
-      $settings = $clean | ConvertFrom-Json
-      return [bool]($settings.profiles.list | Where-Object { $_.guid -eq $guid })
+      $fragmentPath = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\DevConfig\github-copilot.fragment.json'
+      return (Test-Path $fragmentPath)
     setScript: |
-      $guid        = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
-      $iconUrl     = 'https://github.githubassets.com/favicons/favicon-dark.png'
-      $iconDir     = Join-Path $env:LOCALAPPDATA 'WindowsTerminal\icons'
-      $iconPath    = Join-Path $iconDir 'github-copilot.png'
-      $commandline = 'pwsh.exe -NoExit -Command "copilot"'
+      $fragmentsDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\DevConfig'
+      New-Item -ItemType Directory -Path $fragmentsDir -Force | Out-Null
 
-      # 1) Download & cache the icon locally
-      New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
-      Invoke-WebRequest -Uri $iconUrl -OutFile $iconPath -UseBasicParsing
+      # Download icon alongside the fragment file so the relative path "copilot.png" resolves correctly.
+      $iconPath = Join-Path $fragmentsDir 'copilot.png'
+      Invoke-WebRequest -Uri 'https://github.githubassets.com/favicons/favicon-dark.png' -OutFile $iconPath -UseBasicParsing
 
-      # 2) Locate settings.json (Store, Preview, or unpackaged install)
-      $settingsPath = @(
-          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
-          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
-          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
-      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-      if (-not $settingsPath) { throw 'Windows Terminal settings.json not found.' }
-
-      # 3) Back up before editing
-      Copy-Item $settingsPath "$settingsPath.bak" -Force
-
-      # 4) Load JSON (strip // and /* */ comments so ConvertFrom-Json is happy)
-      $raw   = Get-Content $settingsPath -Raw
-      $clean = [regex]::Replace($raw, '/\*[\s\S]*?\*/', '')
-      $clean = [regex]::Replace($clean, '(?m)^\s*//.*$', '')
-      $settings = $clean | ConvertFrom-Json
-
-      # 5) Build the new profile
-      $newProfile = [pscustomobject]@{
-          name              = 'GitHub Copilot'
-          guid              = $guid
-          commandline       = $commandline
-          icon              = $iconPath
-          startingDirectory = '%USERPROFILE%'
-          hidden            = $false
-          tabTitle          = 'Copilot'
+      $fragment = @{
+          profiles = @(
+              @{
+                  guid              = '{b1a4d2c8-6f3e-4a7b-9e2d-1c8f5a3b7d91}'
+                  name              = 'GitHub Copilot'
+                  commandline       = 'pwsh.exe -NoExit -Command "copilot"'
+                  icon              = 'copilot.png'
+                  startingDirectory = '%USERPROFILE%'
+                  hidden            = $false
+                  tabTitle          = 'Copilot'
+              }
+          )
       }
 
-      # 6) Ensure profiles.list exists, then add or replace by guid
-      if (-not $settings.profiles)      { $settings | Add-Member profiles ([pscustomobject]@{ list = @() }) -Force }
-      if (-not $settings.profiles.list) { $settings.profiles | Add-Member list @() -Force }
+      $fragmentFile = Join-Path $fragmentsDir 'github-copilot.fragment.json'
+      $fragment | ConvertTo-Json -Depth 8 | Out-File -FilePath $fragmentFile -Encoding Utf8
 
-      $list = @($settings.profiles.list | Where-Object { $_.guid -ne $guid })
-      $list += $newProfile
-      $settings.profiles.list = $list
+      # Touch settings.json to trigger WT's hot-reload (re-scans Fragments\*.json).
+      @(
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+          "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+      ) | Where-Object { Test-Path $_ } | ForEach-Object {
+          try { (Get-Item -LiteralPath $_).LastWriteTime = Get-Date } catch {}
+      }
 
-      # 7) Save
-      $settings | ConvertTo-Json -Depth 64 | Set-Content -Path $settingsPath -Encoding UTF8
-
-      Write-Host "Added 'GitHub Copilot' profile to $settingsPath" -ForegroundColor Green
-      Write-Host "Icon cached at $iconPath"
-      Write-Host "Backup saved at $settingsPath.bak"
+      Write-Host "GitHub Copilot profile fragment written to $fragmentFile" -ForegroundColor Green
+      Write-Host "Open Windows Terminal: the 'GitHub Copilot' profile is available in the dropdown." -ForegroundColor Cyan
   metadata:
     description: Create Github Copilot Profile
 
