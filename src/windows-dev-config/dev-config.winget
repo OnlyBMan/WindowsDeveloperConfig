@@ -564,9 +564,9 @@ resources:
   - ElevationCheck
   properties:
     keyPath: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
-    valueName: Start_Layout
+    valueName: Start_IrisRecommendations
     valueData:
-      DWord: 1
+      DWord: 0
   metadata:
     description: Disable Start menu recommendations
 
