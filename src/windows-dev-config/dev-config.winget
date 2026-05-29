@@ -45,13 +45,24 @@ resources:
       throw "ElevationCheck: re-launched elevated successfully. This unelevated session is now complete — check the elevated window for results."
 
 # =============================================================================
-# PowerShell 7
+# Terminal and PowerShell 7
 # =============================================================================
+
+- type: Microsoft.WinGet/Package
+  name: Terminal
+  dependsOn:
+  - ElevationCheck
+  properties:
+    id: Microsoft.WindowsTerminal
+    source: winget
+    useLatest: true
+  metadata:
+    description: Install Windows Terminal
 
 - type: Microsoft.WinGet/Package
   name: PowerShell
   dependsOn:
-  - ElevationCheck
+  - Terminal
   properties:
     id: Microsoft.PowerShell
     source: winget
