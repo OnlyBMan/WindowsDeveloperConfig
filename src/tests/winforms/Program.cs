@@ -12,3 +12,4 @@ using System.Windows.Forms;
 
 using var form = new Form { Text = "hello-winforms" };
 Console.WriteLine($"WinForms: {form.Text}");
+form.ShowDialog();
