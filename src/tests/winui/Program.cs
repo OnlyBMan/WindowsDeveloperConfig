@@ -1,15 +1,3 @@
-// Hello-world probe for the WinUI 3 flow.
-//
-// Boots a minimal WinUI 3 Application, opens a top-level Window, and shows a
-// ContentDialog whose body carries the same "WinUI: Application" content the
-// previous console build wrote to stdout. The dialog text is derived from
-// `typeof(Microsoft.UI.Xaml.Application).Name`, which still forces the
-// Microsoft.WinUI projection assembly (shipped by the Microsoft.WindowsAppSDK
-// NuGet) to actually load before any UI appears — if the WinAppSDK restore
-// was incomplete the typeof below would fail and the dialog would never open.
-//
-// The app exits as soon as the dialog's close button is clicked.
-
 using System;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
