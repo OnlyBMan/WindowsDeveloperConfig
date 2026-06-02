@@ -8,11 +8,6 @@
   Opinionated setups for Windows dev boxes. Idempotent. CI-tested.
 </p>
 
-<p align="center">
-  <a href="https://github.com/microsoft/WindowsDeveloperConfig/actions/workflows/ci.yml"><img src="https://github.com/microsoft/WindowsDeveloperConfig/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-</p>
-
 <h3 align="center">
   <a href="#%EF%B8%8F-windows-dev-config">Windows Dev Config</a>
   <span> · </span>
