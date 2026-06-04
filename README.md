@@ -48,6 +48,21 @@ If that fails or `winget configure` is still not recognized, see [Troubleshootin
 
 A single [winget configuration](https://learn.microsoft.com/en-us/windows/package-manager/configuration/) file that installs dev tools, applies opinionated Windows settings, and bootstraps WSL + Ubuntu through the required reboot. Non-interactive. Idempotent. Safe to re-run on an existing machine.
 
+First, get the files onto the box. The config is invoked from a local path, but the bootstrap itself is what installs Git — so on a clean Windows install you'll typically download the repo as a ZIP. If Git is already there, clone it:
+
+```powershell
+# Git already installed:
+git clone https://github.com/microsoft/WindowsDeveloperConfig.git
+cd WindowsDeveloperConfig
+
+# Otherwise, download and extract the ZIP:
+Invoke-WebRequest -Uri https://github.com/microsoft/WindowsDeveloperConfig/archive/refs/heads/main.zip -OutFile WindowsDeveloperConfig.zip
+Expand-Archive .\WindowsDeveloperConfig.zip -DestinationPath .
+cd .\WindowsDeveloperConfig-main
+```
+
+Then apply the configuration:
+
 ```powershell
 winget configure -f .\windows-dev-config\dev-config.winget --accept-configuration-agreements --disable-interactivity
 ```
