@@ -176,6 +176,22 @@ Run `.\wsl-comfort\install.ps1` on the Windows side instead. It installs WSL fir
 
 </details>
 
+<details>
+<summary><strong>WSL install fails with <code>wsl --install ... failed with exit code -1</code></strong></summary>
+
+WSL needs hardware virtualization available to the OS. Two common root causes:
+
+- **On bare metal:** virtualization (VT-x / AMD-V) is disabled in BIOS/UEFI. Reboot into firmware settings, enable it, save, and reboot back into Windows. The exact label varies by vendor — check your motherboard or laptop manufacturer's documentation if you can't find it.
+- **Inside a VM:** the host hasn't exposed nested virtualization to the guest. For a Hyper-V host, run this from an elevated PowerShell session **on the host** (with the guest VM powered off):
+
+  ```powershell
+  Set-VMProcessor -VMName <VM_NAME> -ExposeVirtualizationExtensions $true
+  ```
+
+  Other hypervisors have their own equivalent settings — check your hypervisor's documentation.
+
+</details>
+
 <br/>
 
 ## 🐛 Reporting issues

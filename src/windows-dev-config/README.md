@@ -45,8 +45,21 @@ The flow is a single DSC document (`dev-config.winget`) that handles everything 
 - `winget` with the DSC v3 processor available (the file uses `Microsoft.WinGet/Package`, `Microsoft.Windows/Registry`, and `Microsoft.DSC.Transitional/*`).
 - Administrator rights — the `ElevationCheck` resource will auto-relaunch winget elevated via `Start-Process -Verb RunAs` if you started in an unelevated session, but you'll need to consent at the UAC prompt.
 - The repo on disk. `winget configure` reads a local file path, and the bootstrap is what installs Git, so on a fresh machine you'll either `git clone` (if Git is already installed) or download the repo as a ZIP from GitHub and extract it before running.
+- **Hardware virtualization must be available to the OS** before WSL can install. On bare metal, this means virtualization (VT-x / AMD-V) is enabled in BIOS/UEFI. Inside a VM, it means the host has exposed nested virtualization to the guest. See the Usage callout below.
 
 ## Usage
+
+> [!IMPORTANT]
+> **WSL needs hardware virtualization.** If virtualization isn't available to the OS, the `InstallUbuntu` step fails with `wsl --install ... failed with exit code -1`.
+>
+> - **On bare metal:** enable virtualization (VT-x / AMD-V) in your BIOS/UEFI. The exact label varies by vendor — check your motherboard or laptop manufacturer's documentation if you can't find it. Reboot into firmware settings, toggle it on, save, and reboot back into Windows.
+> - **Inside a VM:** the host must expose nested virtualization to the guest. For a Hyper-V host, run this from an elevated PowerShell session **on the host** (with the guest VM powered off):
+>
+>   ```powershell
+>   Set-VMProcessor -VMName <VM_NAME> -ExposeVirtualizationExtensions $true
+>   ```
+>
+>   Other hypervisors have their own equivalent settings — check your hypervisor's documentation.
 
 **Get the files first** (skip if you already have the repo locally):
 
