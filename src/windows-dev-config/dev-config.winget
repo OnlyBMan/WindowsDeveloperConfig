@@ -873,6 +873,16 @@ resources:
     securityContext: elevated
 
 - type: Microsoft.WinGet/Package
+  name: Coreutils
+  properties:
+    id: Microsoft.Coreutils
+    source: winget
+    useLatest: true
+  metadata:
+    description: Install Coreutils for Windows
+    securityContext: elevated
+
+- type: Microsoft.WinGet/Package
   name: OhMyPosh
   properties:
     id: JanDeDobbeleer.OhMyPosh

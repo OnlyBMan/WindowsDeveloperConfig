@@ -83,7 +83,7 @@ winget configure -f .\windows-dev-config\dev-config.winget --accept-configuratio
 <details>
 <summary><strong>What you get</strong></summary>
 
-- **Dev tools:** PowerShell 7, Git, GitHub CLI, VS Code, .NET SDK 10, Python 3.14 + uv, Node.js, Oh My Posh, and PowerToys.
+- **Dev tools:** PowerShell 7, Git, GitHub CLI, VS Code, .NET SDK 10, Python 3.14 + uv, Node.js, Coreutils for Windows, Oh My Posh, and PowerToys.
 - **Terminal:** PowerShell 7 is the default profile, Oh My Posh is enabled, and Cascadia Mono NF is set as the default font.
 - **Windows settings:** Dark theme, developer mode, long paths, File Explorer defaults, Start/Search cleanup, Edge policies, and other workstation defaults.
 - **WSL:** WSL platform + Ubuntu, including the reboot and the `RunOnce` resume step.
