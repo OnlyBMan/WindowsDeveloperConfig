@@ -1094,7 +1094,7 @@ resources:
           [DllImport("user32.dll", CharSet = CharSet.Auto)]
           public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
       }
-'@
+      '@
       $wallpaperPath = [Environment]::GetFolderPath('CommonApplicationData') + '\DevConfig\wallpaper.png'
       $current = (Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallPaper -EA SilentlyContinue).WallPaper
       return @{ wallpaperPath = $current }
