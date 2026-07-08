@@ -1362,7 +1362,7 @@ resources:
 
       # Fresh install via official VS 2026 Enterprise bootstrapper.
       $vsBootstrapper = Join-Path $env:TEMP 'vs_enterprise_2026.exe'
-      $bootstrapperUrl = 'https://aka.ms/vs/18/release/vs_enterprise.exe'
+      $bootstrapperUrl = 'https://aka.ms/vs/18/Stable/vs_enterprise.exe'
 
       Write-Log "Visual Studio Enterprise not found. Downloading bootstrapper..."
       Write-Log "URL: $bootstrapperUrl"
