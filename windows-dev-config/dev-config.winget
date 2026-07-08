@@ -1192,8 +1192,6 @@ resources:
     securityContext: elevated
 # =============================================================================
 # Visual Studio 2026 Enterprise with C++ and C# workloads
-# Uses winget with custom arguments for workload selection because
-# Microsoft.WinGet/Package does not support installer overrides.
 # =============================================================================
 - type: Microsoft.DSC.Transitional/PowerShellScript
   name: VisualStudio2026
@@ -1201,94 +1199,136 @@ resources:
     getScript: |
       $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
       $instance = $null
-      $packages = $null
-      
+      $complete = $false
+
       if (Test-Path $vsWhere) {
         $instance = & $vsWhere -latest -property installationPath 2>$null
+
         if ($instance) {
-          $packages = & $vsWhere -latest -requires 'Microsoft.VisualStudio.Workload.NativeDesktop', 'Microsoft.VisualStudio.Workload.ManagedDesktop' -property isComplete 2>$null
+          $completeValue = & $vsWhere -latest `
+            -requires Microsoft.VisualStudio.Workload.NativeDesktop Microsoft.VisualStudio.Workload.ManagedDesktop `
+            -property isComplete 2>$null
+
+          $complete = ($completeValue -eq '1')
         }
       }
+
       return @{
         installed = [bool]$instance
-        workloadsComplete = ($packages -eq '1')
+        workloadsComplete = $complete
         installationPath = $instance
       }
+
     testScript: |
       $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-      if (-not (Test-Path $vsWhere)) { return $false }
-      $packages = & $vsWhere -latest -requires 'Microsoft.VisualStudio.Workload.NativeDesktop', 'Microsoft.VisualStudio.Workload.ManagedDesktop' -property isComplete 2>$null
-      return ($packages -eq '1')
+
+      if (-not (Test-Path $vsWhere)) {
+        return $false
+      }
+
+      $completeValue = & $vsWhere -latest `
+        -requires Microsoft.VisualStudio.Workload.NativeDesktop Microsoft.VisualStudio.Workload.ManagedDesktop `
+        -property isComplete 2>$null
+
+      return ($completeValue -eq '1')
+
     setScript: |
       $ErrorActionPreference = 'Stop'
-  
-      # Create a log file
+
       $logFile = Join-Path $env:TEMP "vs-install-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
       Write-Host "Visual Studio install log: $logFile"
-  
+
       function Write-Log {
         param([string]$Message)
+
         $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
         $logEntry = "[$timestamp] $Message"
+
         Write-Host $logEntry
         Add-Content -Path $logFile -Value $logEntry
       }
-  
+
       $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-  
-      # Check if VS is already installed
+      $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+
+      # Check if Visual Studio is already installed.
       if (Test-Path $vsWhere) {
         Write-Log "vswhere.exe found at $vsWhere"
+
         $instance = & $vsWhere -latest -property installationPath 2>$null
-        if ($instance) {
+
+        if ($instance -and (Test-Path $installer)) {
           Write-Log "Visual Studio already installed at $instance"
-          Write-Log "Adding workloads..."
-      
-          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          if (Test-Path $installer) {
-            # The vs_installer.exe also uses / arguments
-            $p = Start-Process -FilePath $installer `
-              -ArgumentList "modify","/installPath","`"$instance`"","/add","Microsoft.VisualStudio.Workload.NativeDesktop","/add","Microsoft.VisualStudio.Workload.ManagedDesktop","/quiet","/norestart" `
-              -Wait -PassThru -NoNewWindow
-        
-            Write-Log "VS modify exit code: $($p.ExitCode)"
-        
-            if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-              throw "Visual Studio modify failed with exit code $($p.ExitCode). Check log: $logFile"
-            }
-            Write-Log "Visual Studio workloads added successfully"
-            return
+          Write-Log "Adding or repairing required workloads..."
+
+          $p = Start-Process -FilePath $installer `
+            -ArgumentList @(
+              'modify',
+              '--installPath', $instance,
+              '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop',
+              '--add', 'Microsoft.VisualStudio.Workload.ManagedDesktop',
+              '--includeRecommended',
+              '--quiet',
+              '--norestart',
+              '--wait'
+            ) `
+            -Wait `
+            -PassThru
+
+          Write-Log "VS modify exit code: $($p.ExitCode)"
+
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            throw "Visual Studio modify failed with exit code $($p.ExitCode). Check log: $logFile"
           }
+
+          Write-Log "Visual Studio workloads added successfully"
+          return
         }
       }
-  
-      # Fresh install via bootstrapper
+
+      # Fresh install via Visual Studio 2026 Enterprise bootstrapper.
       Write-Log "Installing Visual Studio 2026 Enterprise with C++ and C# workloads..."
+
       $vsBootstrapper = Join-Path $env:TEMP 'vs_enterprise.exe'
-  
+
       Write-Log "Downloading VS bootstrapper from https://aka.ms/vs/18/release/vs_enterprise.exe"
+
       $ProgressPreference = 'SilentlyContinue'
-      Invoke-WebRequest -Uri 'https://aka.ms/vs/18/release/vs_enterprise.exe' -OutFile $vsBootstrapper -UseBasicParsing
+      Invoke-WebRequest `
+        -Uri 'https://aka.ms/vs/18/release/vs_enterprise.exe' `
+        -OutFile $vsBootstrapper `
+        -UseBasicParsing
+
       Write-Log "Download complete. File size: $((Get-Item $vsBootstrapper).Length) bytes"
-  
-      Write-Log "Running bootstrapper: $vsBootstrapper /add Microsoft.VisualStudio.Workload.NativeDesktop /add Microsoft.VisualStudio.Workload.ManagedDesktop /quiet /norestart"
-  
-      # IMPORTANT: Removed -NoNewWindow and corrected argument format
+
+      Write-Log "Running bootstrapper with required workloads..."
+
       $p = Start-Process -FilePath $vsBootstrapper `
-        -ArgumentList "/add","Microsoft.VisualStudio.Workload.NativeDesktop","/add","Microsoft.VisualStudio.Workload.ManagedDesktop","/quiet","/norestart" `
-        -Wait -PassThru
-  
+        -ArgumentList @(
+          '--wait',
+          '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop',
+          '--add', 'Microsoft.VisualStudio.Workload.ManagedDesktop',
+          '--includeRecommended',
+          '--quiet',
+          '--norestart'
+        ) `
+        -Wait `
+        -PassThru
+
       Write-Log "Bootstrapper exit code: $($p.ExitCode)"
-  
+
       Remove-Item $vsBootstrapper -Force -ErrorAction SilentlyContinue
-  
+
       if ($p.ExitCode -eq 0) {
         Write-Log "Visual Studio 2026 Enterprise installed successfully"
-      } elseif ($p.ExitCode -eq 3010) {
-        Write-Log "Visual Studio 2026 Enterprise installed successfully (restart required)"
-      } else {
+      }
+      elseif ($p.ExitCode -eq 3010) {
+        Write-Log "Visual Studio 2026 Enterprise installed successfully. Restart required."
+      }
+      else {
         throw "Visual Studio install failed with exit code $($p.ExitCode). Check log: $logFile"
       }
+
   metadata:
-    description: Install Visual Studio 2026 Enterprise (C++ and C# workloads)
+    description: Install Visual Studio 2026 Enterprise with C++ and C# workloads
     securityContext: elevated
