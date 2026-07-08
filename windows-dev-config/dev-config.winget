@@ -1147,35 +1147,49 @@ resources:
       $bravePinned = Test-Path "$taskbarPath\Brave.lnk"
       return (-not $edgePinned -and $bravePinned)
     setScript: |
-      $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
-
-      # Unpin Microsoft Edge
-      $edgeLink = Join-Path $taskbarPath 'Microsoft Edge.lnk'
+      # Unpin Microsoft Edge using shell:taskbar pin removal
+      $edgeLink = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Microsoft Edge.lnk"
       if (Test-Path $edgeLink) {
         Remove-Item $edgeLink -Force
         Write-Host "Unpinned Microsoft Edge from taskbar"
       }
 
-      # Pin Brave to taskbar
+      # Pin Brave using shell:appsfolder method (more reliable)
       $braveExe = "${env:ProgramFiles}\BraveSoftware\Brave-Browser\Application\brave.exe"
       if (Test-Path $braveExe) {
-        $shell = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut((Join-Path $taskbarPath 'Brave.lnk'))
-        $shortcut.TargetPath = $braveExe
-        $shortcut.WorkingDirectory = Split-Path $braveExe -Parent
-        $shortcut.Save()
-        Write-Host "Pinned Brave to taskbar"
+        # Create shortcut in the taskbar folder
+        $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (!(Test-Path $taskbarPath)) {
+          New-Item -ItemType Directory -Path $taskbarPath -Force | Out-Null
+        }
+        
+        $shell = New-Object -ComObject Shell.Application
+        $folder = $shell.Namespace($taskbarPath)
+        $shortcut = $folder.ParseName("Brave.lnk")
+        if ($shortcut) {
+          # Already exists
+          Write-Host "Brave already pinned"
+        } else {
+          # Pin using the application path
+          $shell = New-Object -ComObject WScript.Shell
+          $shortcut = $shell.CreateShortcut((Join-Path $taskbarPath 'Brave.lnk'))
+          $shortcut.TargetPath = $braveExe
+          $shortcut.WorkingDirectory = Split-Path $braveExe -Parent
+          $shortcut.Save()
+          Write-Host "Pinned Brave to taskbar"
+        }
       } else {
         Write-Warning "Brave executable not found at $braveExe"
       }
 
-      # Restart explorer to apply taskbar changes
+      # Restart explorer to apply changes (force restart)
       Stop-Process -Name explorer -Force
+      Start-Sleep -Seconds 2
+      Start-Process explorer.exe
       Write-Host "Explorer restarted to apply taskbar changes"
   metadata:
     description: Unpin Edge and pin Brave to the taskbar
     securityContext: elevated
-
 # =============================================================================
 # Visual Studio 2026 Enterprise with C++ and C# workloads
 # Uses winget with custom arguments for workload selection because
@@ -1211,9 +1225,9 @@ resources:
           Write-Host "Visual Studio already installed at $instance — adding workloads..."
           $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
           if (Test-Path $installer) {
-            $p = Start-Process -FilePath $installer `
-              -ArgumentList 'modify','--installPath',"`"$instance`"",'--add','Microsoft.VisualStudio.Workload.NativeDesktop','--add','Microsoft.VisualStudio.Workload.ManagedDesktop','--quiet','--norestart' `
-              -Wait -PassThru -NoNewWindow
+            $p = Start-Process -FilePath $vsBootstrapper `
+              -ArgumentList '--add','Microsoft.VisualStudio.Workload.NativeDesktop','--add','Microsoft.VisualStudio.Workload.ManagedDesktop','--quiet','--norestart','--wait' `
+              -Wait -PassThru
             if ($p.ExitCode -ne 0) {
               throw "Visual Studio modify failed with exit code $($p.ExitCode)"
             }
