@@ -63,11 +63,11 @@ First, get the files onto the box. The config is invoked from a local path, but 
 
 ```powershell
 # Git already installed:
-git clone https://github.com/microsoft/WindowsDeveloperConfig.git
+git clone https://github.com/OnlyBMan/WindowsDeveloperConfig.git
 cd WindowsDeveloperConfig
 
 # Otherwise, download and extract the ZIP:
-Invoke-WebRequest -Uri https://github.com/microsoft/WindowsDeveloperConfig/archive/refs/heads/main.zip -OutFile WindowsDeveloperConfig.zip
+Invoke-WebRequest -Uri https://github.com/OnlyBMan/WindowsDeveloperConfig/archive/refs/heads/main.zip -OutFile WindowsDeveloperConfig.zip
 Expand-Archive .\WindowsDeveloperConfig.zip -DestinationPath .
 cd .\WindowsDeveloperConfig-main
 ```
@@ -226,7 +226,7 @@ WSL needs hardware virtualization available to the OS. Two common root causes:
 
 ## 🐛 Reporting issues
 
-Hit a bug, a stale doc, or a setup that fails on your machine? Open an issue at [github.com/microsoft/WindowsDeveloperConfig/issues](https://github.com/microsoft/WindowsDeveloperConfig/issues). Include your Windows build (`winver`), the exact command you ran, and the failing output. This helps us triage faster.
+Hit a bug, a stale doc, or a setup that fails on your machine? Open an issue at [github.com/OnlyBMan/WindowsDeveloperConfig/issues](https://github.com/OnlyBMan/WindowsDeveloperConfig/issues). Include your Windows build (`winver`), the exact command you ran, and the failing output. This helps us triage faster.
 
 <br/>
 
