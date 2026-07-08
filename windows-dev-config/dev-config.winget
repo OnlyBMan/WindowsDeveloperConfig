@@ -1119,7 +1119,7 @@ resources:
           [DllImport("user32.dll", CharSet = CharSet.Auto)]
           public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
       }
-'@
+      '@
       $SPI_SETDESKWALLPAPER = 20
       $SPIF_UPDATEINIFILE   = 0x01
       $SPIF_SENDCHANGE      = 0x02
