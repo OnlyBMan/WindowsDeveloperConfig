@@ -633,6 +633,18 @@ resources:
     description: Disable sync provider notifications (tips)
     securityContext: elevated
 
+# Disable checkboxes on file/folder icons in Explorer
+- type: Microsoft.Windows/Registry
+  name: DisableCheckboxes
+  properties:
+    keyPath: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+    valueName: AutoCheckSelect
+    valueData:
+      DWord: 0
+  metadata:
+    description: Disable item checkboxes in File Explorer
+    securityContext: elevated
+
 # =============================================================================
 # Notifications and Lock Screen
 # =============================================================================
@@ -684,7 +696,19 @@ resources:
     valueData:
       DWord: 1
   metadata:
-    description: Enable "End Task" on right-click of taskbar icons  
+    description: Enable "End Task" on right-click of taskbar icons
+    securityContext: elevated
+
+# Taskbar left-align (0 = left, 1 = center)
+- type: Microsoft.Windows/Registry
+  name: TaskbarLeftAlign
+  properties:
+    keyPath: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+    valueName: TaskbarAl
+    valueData:
+      DWord: 0
+  metadata:
+    description: Align taskbar icons to the left
     securityContext: elevated
 
 # =============================================================================
@@ -902,6 +926,26 @@ resources:
   metadata:
     description: Install PowerToys (Optional)
 
+- type: Microsoft.WinGet/Package
+  name: Brave
+  properties:
+    id: Brave.Brave
+    source: winget
+    useLatest: true
+    installMode: silent
+  metadata:
+    description: Install Brave Browser
+
+- type: Microsoft.WinGet/Package
+  name: ClaudeCode
+  properties:
+    id: Anthropic.ClaudeCode
+    source: winget
+    useLatest: true
+    installMode: silent
+  metadata:
+    description: Install Anthropic Claude Code
+
 - type: Microsoft.Windows/Registry
   name: PowerToysAOT
   dependsOn:
@@ -1035,3 +1079,167 @@ resources:
       copilot plugin install winui@win-dev-skills
   metadata:
     description: Install the WinUI Copilot plugin from win-dev-skills
+
+# =============================================================================
+# Set Desktop Wallpaper
+# Copies the wallpaper from the config directory and applies it.
+# =============================================================================
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: SetWallpaper
+  properties:
+    getScript: |
+      Add-Type -TypeDefinition @'
+      using System.Runtime.InteropServices;
+      public class Wallpaper {
+          [DllImport("user32.dll", CharSet = CharSet.Auto)]
+          public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+      }
+'@
+      $wallpaperPath = [Environment]::GetFolderPath('CommonApplicationData') + '\DevConfig\wallpaper.png'
+      $current = (Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallPaper -EA SilentlyContinue).WallPaper
+      return @{ wallpaperPath = $current }
+    testScript: |
+      $wallpaperPath = [Environment]::GetFolderPath('CommonApplicationData') + '\DevConfig\wallpaper.png'
+      $current = (Get-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallPaper -EA SilentlyContinue).WallPaper
+      return ($current -eq $wallpaperPath)
+    setScript: |
+      $sourceFile = "${WinGetConfigRoot}\assets\wallpaper.png"
+      if (-not (Test-Path $sourceFile)) {
+        Write-Warning "Wallpaper image not found at $sourceFile"
+        return
+      }
+      $destDir = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'DevConfig'
+      New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+      $destFile = Join-Path $destDir 'wallpaper.png'
+      Copy-Item $sourceFile $destFile -Force
+
+      Add-Type -TypeDefinition @'
+      using System.Runtime.InteropServices;
+      public class Wallpaper {
+          [DllImport("user32.dll", CharSet = CharSet.Auto)]
+          public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+      }
+'@
+      $SPI_SETDESKWALLPAPER = 20
+      $SPIF_UPDATEINIFILE   = 0x01
+      $SPIF_SENDCHANGE      = 0x02
+      [Wallpaper]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $destFile, $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE)
+      Write-Host "Wallpaper set to $destFile"
+  metadata:
+    description: Set the desktop wallpaper
+
+# =============================================================================
+# Taskbar Pins — unpin Edge, pin Brave
+# =============================================================================
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: TaskbarPins
+  dependsOn:
+    - Brave
+  properties:
+    getScript: |
+      $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+      $edgePinned = Test-Path "$taskbarPath\Microsoft Edge.lnk"
+      $bravePinned = Test-Path "$taskbarPath\Brave.lnk"
+      return @{ edgePinned = $edgePinned; bravePinned = $bravePinned }
+    testScript: |
+      $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+      $edgePinned = Test-Path "$taskbarPath\Microsoft Edge.lnk"
+      $bravePinned = Test-Path "$taskbarPath\Brave.lnk"
+      return (-not $edgePinned -and $bravePinned)
+    setScript: |
+      $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+
+      # Unpin Microsoft Edge
+      $edgeLink = Join-Path $taskbarPath 'Microsoft Edge.lnk'
+      if (Test-Path $edgeLink) {
+        Remove-Item $edgeLink -Force
+        Write-Host "Unpinned Microsoft Edge from taskbar"
+      }
+
+      # Pin Brave to taskbar
+      $braveExe = "${env:ProgramFiles}\BraveSoftware\Brave-Browser\Application\brave.exe"
+      if (Test-Path $braveExe) {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut((Join-Path $taskbarPath 'Brave.lnk'))
+        $shortcut.TargetPath = $braveExe
+        $shortcut.WorkingDirectory = Split-Path $braveExe -Parent
+        $shortcut.Save()
+        Write-Host "Pinned Brave to taskbar"
+      } else {
+        Write-Warning "Brave executable not found at $braveExe"
+      }
+
+      # Restart explorer to apply taskbar changes
+      Stop-Process -Name explorer -Force
+      Write-Host "Explorer restarted to apply taskbar changes"
+  metadata:
+    description: Unpin Edge and pin Brave to the taskbar
+    securityContext: elevated
+
+# =============================================================================
+# Visual Studio 2026 Enterprise with C++ and C# workloads
+# Uses winget with custom arguments for workload selection because
+# Microsoft.WinGet/Package does not support installer overrides.
+# =============================================================================
+- type: Microsoft.DSC.Transitional/PowerShellScript
+  name: VisualStudio2026
+  properties:
+    getScript: |
+      $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+      if (Test-Path $vsWhere) {
+        $instance = & $vsWhere -latest -property installationPath 2>$null
+        if ($instance) {
+          $packages = & $vsWhere -latest -requires 'Microsoft.VisualStudio.Workload.NativeDesktop', 'Microsoft.VisualStudio.Workload.ManagedDesktop' -property isComplete 2>$null
+        }
+      }
+      return @{
+        installed = [bool]$instance
+        workloadsComplete = ($packages -eq '1')
+      }
+    testScript: |
+      $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+      if (-not (Test-Path $vsWhere)) { return $false }
+      $packages = & $vsWhere -latest -requires 'Microsoft.VisualStudio.Workload.NativeDesktop', 'Microsoft.VisualStudio.Workload.ManagedDesktop' -property isComplete 2>$null
+      return ($packages -eq '1')
+    setScript: |
+      $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+      # If VS is already installed, just add workloads via modify
+      if (Test-Path $vsWhere) {
+        $instance = & $vsWhere -latest -property installationPath 2>$null
+        if ($instance) {
+          Write-Host "Visual Studio already installed at $instance — adding workloads..."
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+          if (Test-Path $installer) {
+            $p = Start-Process -FilePath $installer `
+              -ArgumentList 'modify','--installPath',"`"$instance`"",'--add','Microsoft.VisualStudio.Workload.NativeDesktop','--add','Microsoft.VisualStudio.Workload.ManagedDesktop','--quiet','--norestart' `
+              -Wait -PassThru -NoNewWindow
+            if ($p.ExitCode -ne 0) {
+              throw "Visual Studio modify failed with exit code $($p.ExitCode)"
+            }
+            Write-Host "Visual Studio workloads added successfully"
+            return
+          }
+        }
+      }
+
+      # Fresh install via winget
+      Write-Host "Installing Visual Studio 2026 Enterprise with C++ and C# workloads..."
+      $vsBootstrapper = Join-Path $env:TEMP 'vs_enterprise.exe'
+
+      # Download the VS 2026 bootstrapper
+      Invoke-WebRequest -Uri 'https://aka.ms/vs/18/release/vs_enterprise.exe' -OutFile $vsBootstrapper -UseBasicParsing
+
+      $p = Start-Process -FilePath $vsBootstrapper `
+        -ArgumentList '--add','Microsoft.VisualStudio.Workload.NativeDesktop','--add','Microsoft.VisualStudio.Workload.ManagedDesktop','--quiet','--norestart','--wait' `
+        -Wait -PassThru -NoNewWindow
+
+      Remove-Item $vsBootstrapper -Force -ErrorAction SilentlyContinue
+
+      if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+        throw "Visual Studio install failed with exit code $($p.ExitCode)"
+      }
+      Write-Host "Visual Studio 2026 Enterprise installed with C++ and C# workloads"
+  metadata:
+    description: Install Visual Studio 2026 Enterprise (C++ and C# workloads)
+    securityContext: elevated
