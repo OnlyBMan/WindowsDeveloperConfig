@@ -1249,9 +1249,9 @@ resources:
           if (Test-Path $installer) {
             Write-Log "Running: $installer modify --installPath `"$instance`" --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Workload.ManagedDesktop --quiet --norestart"
             
-            $p = Start-Process -FilePath $installer `
-              -ArgumentList "modify","--installPath","`"$instance`"","--add","Microsoft.VisualStudio.Workload.NativeDesktop","--add","Microsoft.VisualStudio.Workload.ManagedDesktop","--quiet","--norestart" `
-              -Wait -PassThru -NoNewWindow
+            $p = Start-Process -FilePath $vsBootstrapper `
+              -ArgumentList "/add","Microsoft.VisualStudio.Workload.NativeDesktop","/add","Microsoft.VisualStudio.Workload.ManagedDesktop","/quiet","/norestart" `
+              -Wait -PassThru
             
             Write-Log "VS modify exit code: $($p.ExitCode)"
             
